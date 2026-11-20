@@ -35,7 +35,7 @@ services:
       - key: APP_ENV
         value: production
       - key: CORS_ORIGINS
-        value: https://fixsaathi-copilot.onrender.com
+        value: https://fixsaathi-copilot-v9cb.onrender.com
       - key: STORAGE_PROVIDER
         value: database                # photos survive restarts (no persistent disk on the free plan)
       - key: VECTOR_SEARCH_MODE
@@ -69,7 +69,7 @@ services:
       - key: NODE_VERSION
         value: "22.19.0"
       - key: VITE_API_BASE_URL
-        value: https://fixsaathi-copilot-api.onrender.com
+        value: https://fixsaathi-copilot-api-v9cb.onrender.com
     routes:
       - type: rewrite                  # client-side routing: /session/123, /reports ... serve the app
         source: /*

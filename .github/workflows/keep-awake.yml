@@ -10,4 +10,4 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - run: curl -fsS --max-time 90 --retry 2 https://fixsaathi-copilot-api.onrender.com/ready
+      - run: curl -fsS --max-time 90 --retry 2 https://fixsaathi-copilot-api-v9cb.onrender.com/ready
