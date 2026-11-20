@@ -65,3 +65,13 @@ def test_earlier_photo_stays_available_for_follow_ups(client, tech, session_id, 
     last = _last_contents(fake)[-1]
     assert sum(1 for p in last.parts if p.inline_data) == 1 and 'earlier in this session' in _text(last)
     assert '[shared a photo]' in _text(_last_contents(fake)[0])
+
+
+def test_earlier_photo_not_resent_on_every_later_message(client, tech, session_id, fake):
+    mid = client.post(f'/api/v1/sessions/{session_id}/images', files={'file': ('x.png', png(), 'image/png')}, headers=tech['h']).json()['id']
+    client.post(f'/api/v1/sessions/{session_id}/messages', json={'text': 'Look at this', 'media_ids': [mid]}, headers=tech['h'])
+    for t in ('Regulator is on 5', 'Fan is 6 years old', 'Bearings were greased last year'):
+        client.post(f'/api/v1/sessions/{session_id}/messages', json={'text': t}, headers=tech['h'])
+    assert sum(1 for p in _last_contents(fake)[-1].parts if p.inline_data) == 0  # unrelated follow-up: no image tokens
+    client.post(f'/api/v1/sessions/{session_id}/messages', json={'text': 'Is the mark in the photo a burn?'}, headers=tech['h'])
+    assert sum(1 for p in _last_contents(fake)[-1].parts if p.inline_data) == 1  # refers to it: photo sent again

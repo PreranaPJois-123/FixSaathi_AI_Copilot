@@ -128,6 +128,22 @@ async def _retrieve(db: Session, s: RepairSession, text: str, exclude_id=None, e
     return await kb.retrieve(db, q.strip(), category=s.appliance_type)
 
 
+PHOTO_REF = re.compile(r'\b(photo|image|picture|pic|pics|snap|this|that|these|those|mark|marks|see|seen|visible|look|looks|shown|colour|color|dikh\w*|tasveer|foto)\b', re.I)
+PHOTO_FOLLOW_UPS = 2
+
+
+def _photo_still_relevant(db: Session, s: RepairSession, text: str, exclude_id=None) -> bool:
+    """Re-send the latest photo only for the next few follow-ups, or when the message refers to it. Each image costs
+    hundreds of input tokens, so it is not attached to every later message of a long session."""
+    q = select(Conversation).where(Conversation.session_id == s.id, Conversation.role == 'user')
+    if exclude_id is not None:
+        q = q.where(Conversation.id != exclude_id)
+    recent = list(db.scalars(q.order_by(Conversation.created_at.desc()).limit(PHOTO_FOLLOW_UPS)))
+    if any((m.meta or {}).get('media_ids') for m in recent):
+        return True
+    return bool(PHOTO_REF.search(text or ''))
+
+
 async def chat_reply(db: Session, s: RepairSession, user: User, text: str, media_ids: list, exclude_id=None, channel: str = 'text') -> Conversation:
     g = _ai(db, s)
     attached, doc_text = _attachments(db, s, media_ids) if media_ids else ([], '')
@@ -137,8 +153,8 @@ async def chat_reply(db: Session, s: RepairSession, user: User, text: str, media
                    types.Part(text=prompts.wrap('technician_input', text or '(technician shared a file)'))]
     if media_ids:
         final += attached
-    else:
-        earlier = _images(db, s, None, limit=1)  # follow-up questions about a photo sent earlier in this session
+    elif _photo_still_relevant(db, s, text, exclude_id):  # follow-ups about a photo sent earlier; not re-sent on every message
+        earlier = _images(db, s, None, limit=1)
         if earlier:
             final += [types.Part(text='Most recent photo from earlier in this session, for reference:'), *earlier]
     if channel == 'voice':

@@ -19,6 +19,7 @@ LAST_STATUS: dict = {'ok': None}
 # Models that just answered quota / billing / not-found are skipped for a while, so every message doesn't wait on them again.
 COOLDOWN: dict[str, float] = {}
 COOL_CODES = {'QUOTA_EXCEEDED': 60.0, 'BILLING_REQUIRED': 900.0, 'MODEL_NOT_FOUND': 900.0}
+TEXT_OUTPUT_CAP = {'chat': 2048}  # output tokens, thinking included; chat answers are a few short paragraphs
 MODEL_SETTINGS = {'agent': 'gemini_agent_model', 'live': 'gemini_live_model', 'embed': 'gemini_embed_model', 'image': 'nano_banana_model'}
 
 
@@ -175,7 +176,8 @@ class GeminiClient:
             raise AIError('The AI model returned a response that failed validation.', code='AI_INVALID_OUTPUT') from e
 
     async def generate_text(self, op: str, contents: Any, system: str, temperature: float = 0.4) -> tuple[str, CallResult]:
-        resp, meta = await self._agent_call(op, contents, system_instruction=system, temperature=temperature)
+        cap = TEXT_OUTPUT_CAP.get(op)  # bounds cost and latency of free-text replies; JSON outputs are not capped (truncation breaks them)
+        resp, meta = await self._agent_call(op, contents, system_instruction=system, temperature=temperature, **({'max_output_tokens': cap} if cap else {}))
         return self._text_or_raise(resp, op), meta
 
     async def generate_image(self, prompt: str, reference: tuple[bytes, str] | None = None) -> tuple[bytes, str, CallResult]:
