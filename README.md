@@ -2,15 +2,17 @@
 
 FixSaathi is a repair copilot for appliance field technicians. The technician picks the appliance, describes the fault by text or voice, and adds a photo. FixSaathi gives a ranked diagnosis grounded in repair records, then guided steps. The **server** locks every step that needs the power off until the technician records both safety statements. When the job is done, the service report is written automatically.
 
-- **Live:** https://fixsaathi.onrender.com (health check: `/health`)
+- **Live app:** https://fixsaathi-copilot-v9cb.onrender.com
+- **API:** https://fixsaathi-copilot-api-v9cb.onrender.com (docs: `/docs`, health: `/health`)
 - **Stack:** React 19 + TypeScript (Vite, Tailwind 4) · FastAPI + SQLAlchemy 2 + Alembic · PostgreSQL · Google Gemini through the official `google-genai` SDK, called from the server only
 
 ```
-frontend/   React app (served by the backend in production)
-backend/    FastAPI app, Gemini integration, safety gate, demo scenarios, dataset pipeline, 132 tests
-data/       377 repair records: ApplianceDB (ODbL), manufacturer documentation (summarised, with links), FixSaathi guidance
-docs/       FEATURE_AUDIT, TECHNICAL_REPORT, DEMO_SCRIPT, SUBMISSION_CHECKLIST, architecture, API, safety, datasets
-Dockerfile  One image: builds the site, then serves the site and API from FastAPI
+frontend/    React app (Render static site in production), 29 tests
+backend/     FastAPI app, Gemini integration, safety gate, demo scenarios, dataset pipeline, 205 tests
+data/        377 repair records: ApplianceDB (ODbL), manufacturer documentation (summarised, with links), FixSaathi guidance
+docs/        FEATURE_AUDIT, TECHNICAL_REPORT, DEMO_SCRIPT, SUBMISSION_CHECKLIST, architecture, API, safety, datasets
+render.yaml  Render Blueprint: static site + API + PostgreSQL
+Dockerfile   Alternative single image: builds the site, then serves the site and API from FastAPI
 ```
 
 Start with **docs/FEATURE_AUDIT.md** for what is verified and what is not.
@@ -21,8 +23,8 @@ FixSaathi does **not** use a trained or fine-tuned model. It calls Google Gemini
 
 1. The appliance comes from the session, or is detected from the technician's words (`fridge not cooling` is a refrigerator, not an AC).
 2. Brand, model and error codes are extracted (`CH 38`, `CH38` and the alias `F4` all match LG's record).
-3. PostgreSQL full-text search ranks records **within that appliance only**, preferring the same brand and manufacturer-documented sources.
-4. Gemini gets those records as tagged evidence. The server deletes any citation that wasn't retrieved, and marks a fault as unverified when no record supports it.
+3. Records are ranked **within that appliance only**: exact error-code matches first, then PostgreSQL full-text search and Gemini embeddings (`gemini-embedding-001`), whose scores are added together, so a record found both ways ranks highest. Same-brand and manufacturer-documented sources are preferred. Common Hinglish words (pankha, thanda, awaaz...) are mapped to the English terms the records use.
+4. Gemini gets only the top matching records (never the whole knowledge base) as tagged evidence. The server deletes any citation that wasn't retrieved, and marks a fault as unverified when no record supports it.
 5. The safety gate is server code: power steps stay locked until both statements are recorded, and microwave steps that would open the cabinet are replaced with a hand-over to authorised service.
 
 | Appliance | Records |
@@ -39,19 +41,34 @@ See `docs/DATASET_QUALITY_REPORT.md`, `docs/SOURCE_ATTRIBUTION.md` and `docs/RAG
 
 ## Deploy on Render (Blueprint)
 
-`render.yaml` defines three free resources in Singapore:
+`render.yaml` defines three free resources in Singapore (Render added the `-v9cb` suffix to each name when the Blueprint was created):
 
 | Resource | Type | What it does |
 |---|---|---|
-| `fixsaathi-copilot` | Static site (`frontend/`, `npm ci && npm run build`, publishes `dist`) | The React app. All paths rewrite to `index.html` for client-side routing. `VITE_API_BASE_URL` points at the API. |
-| `fixsaathi-copilot-api` | Python web service | `pip install -r backend/requirements.txt`, then `backend/scripts/render_start.sh`: migrations (upgrade only), idempotent load of the 377 records, background embedding index, then uvicorn on `0.0.0.0:$PORT`. Health check: `/ready`. |
-| `fixsaathi-copilot-db` | PostgreSQL 16 | `DATABASE_URL` is wired from the database (internal URL). No public access. Photos are stored here too (`STORAGE_PROVIDER=database`), because the free plan has no persistent disk. |
+| `fixsaathi-copilot-v9cb` | Static site (`frontend/`, `npm ci && npm run build`, publishes `dist`) | The React app. All paths rewrite to `index.html` for client-side routing. `VITE_API_BASE_URL` points at the API. |
+| `fixsaathi-copilot-api-v9cb` | Python web service | `pip install -r backend/requirements.txt`, then `backend/scripts/render_start.sh`: migrations (upgrade only), idempotent load of the 377 records, background embedding index, then uvicorn on `0.0.0.0:$PORT`. Health check: `/ready`. |
+| `fixsaathi-copilot-db-v9cb` | PostgreSQL 16 | `DATABASE_URL` is wired from the database (internal URL). No public access. Photos are stored here too (`STORAGE_PROVIDER=database`), because the free plan has no persistent disk. |
 
 Secrets are never in the repo: Render generates `SECRET_KEY`, and `GEMINI_API_KEY` is entered on the API service's **Environment** page (`sync: false`). Every push to `main` redeploys both services. To get a **manager** account (dashboard), register in the app, then set `BOOTSTRAP_MANAGER_EMAIL` to that email on the API service's Environment page; the next start promotes it (nothing happens if the email is not registered).
 
 **Free-plan limits:** the API sleeps after 15 minutes idle (first request then takes up to a minute), a workspace gets 750 instance-hours a month across all free services, and a free database expires 30 days after creation unless upgraded. `.github/workflows/keep-awake.yml` wakes the API on demand before a demo.
 
 `/health` returns 200 only when the database answers and 503 otherwise; it also reports whether AI is configured. `/ready` is the lighter check Render uses.
+
+### Verified in production
+
+Tested against the live services with real Gemini calls and safe, synthetic inputs:
+
+| Feature | Result |
+|---|---|
+| Registration, login, token refresh, data kept after re-login | Works |
+| Chat and diagnosis grounded in records, with citations | Works (English, Hinglish, Hindi input) |
+| Photo upload, component located on a photo, chat reading text in a photo | Works |
+| Repair steps, with power steps locked and hidden until both safety statements are recorded | Works (chat also withholds power-sensitive steps) |
+| Service report | Works |
+| Voice | Browser voice mode: the server side (short spoken replies) is tested. Speech recognition and read-aloud run in the browser and were not tested automatically. |
+| Gemini Live voice | Not available: the current API key has no Live access (returns `MODEL_NOT_CONFIGURED`) |
+| AI step illustrations | Not available: every image model needs billing on the key's project (`BILLING_REQUIRED`) |
 
 ## Run locally
 
@@ -110,12 +127,6 @@ FRONTEND_DIST=../frontend/dist uvicorn app.main:app --port 8000   # site and API
 
 To make yourself a manager (for the dashboard): `python scripts/create_user.py --email you@example.com --role manager --org "Your Company"`
 
-### Tests
-
-```bash
-cd backend && DATABASE_URL=postgresql+psycopg://USER:PASS@localhost:5432/fixsaathi_test pytest -q   # wipes that test database; refuses any non-local or non-*_test database
-cd frontend && npm test && npm run build
-```
 
 ### What you can attach
 
@@ -129,6 +140,7 @@ Use the **+** button in the chat: photos (JPG, PNG, WebP, up to 8 MB), PDFs, Wor
 | `connection refused` / `password authentication failed` | PostgreSQL isn't running, or `DATABASE_URL` in `backend/.env` has the wrong user or password. |
 | Chat says *AI is not available* | No `GEMINI_API_KEY` in `backend/.env`. Paste it, restart the backend. |
 | *Free-tier quota reached* | Wait about a minute; the fallback models are tried automatically. |
+| Step picture says `BILLING_REQUIRED` | The key's tier has no image-generation model. Enable billing on its Google project. |
 | Live voice says `LIVE_NOT_AVAILABLE` | The key cannot open Gemini Live sessions (`python scripts/check_gemini.py --call --live`). The voice page falls back to browser voice mode. |
 | Frontend tests fail in `undici` (`reading 'bind'`) | Node is older than 22.19: `nvm install 22 && nvm use` in `frontend/`. |
 | Voice button does nothing | Use Chrome or Edge and allow the microphone. Voice uses browser speech plus Gemini. |
@@ -139,11 +151,12 @@ Use the **+** button in the chat: photos (JPG, PNG, WebP, up to 8 MB), PDFs, Wor
 
 - **Errors:** every Gemini failure is classified (`INVALID_API_KEY`, `PERMISSION_DENIED`, `MODEL_NOT_FOUND`, `BILLING_REQUIRED`, `QUOTA_EXCEEDED`, `AI_TIMEOUT`, `NETWORK_ERROR`, `AI_BLOCKED`, ...). The chat shows the reason and a fix. The technician's message is saved either way.
 - **Retries:** free-tier rate limits are retried after the delay Google asks for, then the next fallback model is tried. Every switch is logged. Bad keys and unknown models are never retried.
+- **Cost and speed:** only the top matching records are sent (about 1,400 input tokens per chat reply); chat replies are capped at 2,048 output tokens; an earlier photo is re-sent only for the next two follow-ups or when the message refers to it; the query is embedded only when an index exists; calls time out after 45 s with one retry. Token use per call is recorded in the `ai_usage` table.
 - **Without a key:** AI endpoints return `AI_NOT_CONFIGURED`. The UI says so and offers the **labelled demo scenarios** (`/demo`). Demo sessions use scripted sample content written by the team, and every screen labels them "Demo scenario: scripted sample, not live AI". The safety lock, logging and reports are the same server code as live sessions.
 
 ## Voice
 
-The voice page first tries the **Gemini Live** relay (WebSocket, 16 kHz audio up, 24 kHz down). If the server's key has no Live model, it switches to **browser voice mode**: Chrome or Edge speech recognition turns speech into text, the normal Gemini chat answers through the server, and the browser reads the answer aloud. This is **not** Gemini Live streaming. Microphone denial and unsupported browsers show a clear message.
+The voice page first tries the **Gemini Live** relay (only when `GEMINI_LIVE_MODEL` is set; it is not set in production because the current key has no Live access) (WebSocket, 16 kHz audio up, 24 kHz down). If the server's key has no Live model, it switches to **browser voice mode**: Chrome or Edge speech recognition turns speech into text, the normal Gemini chat answers through the server, and the browser reads the answer aloud. This is **not** Gemini Live streaming. Microphone denial and unsupported browsers show a clear message.
 
 ## Safety model (enforced in backend code)
 
@@ -159,10 +172,10 @@ The voice page first tries the **Gemini Live** relay (WebSocket, 16 kHz audio up
 
 ```bash
 cd backend && createdb fixsaathi_test
-DATABASE_URL=postgresql+psycopg://$USER@localhost:5432/fixsaathi_test SECRET_KEY=test-secret-key-0123456789-abcdefghijk pytest -q
-cd ../frontend && npm test && npm run build && npm run lint
+DATABASE_URL=postgresql+psycopg://$USER@localhost:5432/fixsaathi_test SECRET_KEY=test-secret-key-0123456789-abcdefghijk pytest -q   # 205 tests
+cd ../frontend && npm test && npm run build && npm run lint                                                                       # 29 tests
 ```
 
-The backend tests run the real Alembic migrations on PostgreSQL. Gemini is replaced by a deterministic fake, so no paid calls are made.
+The backend tests run the real Alembic migrations on PostgreSQL and **wipe that test database**, so the test setup refuses to run unless the database is local and its name ends in `_test`. Gemini is replaced by a deterministic fake, and the test setup blanks any real key in `backend/.env`, so no paid calls are made.
 
 Data licence: ApplianceDB-derived records are ODbL-1.0 (attribution and share-alike). See docs/DATASET_SOURCES.md.
