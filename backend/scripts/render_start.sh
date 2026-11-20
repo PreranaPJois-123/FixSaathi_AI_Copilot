@@ -7,7 +7,11 @@
 set -e
 alembic upgrade head
 python scripts/ingest_knowledge.py --if-present
+# Optional, set in the Render Dashboard: promote one already-registered account to manager (the free plan has no shell).
+if [ -n "$BOOTSTRAP_MANAGER_EMAIL" ]; then
+  python scripts/create_user.py --email "$BOOTSTRAP_MANAGER_EMAIL" --role manager --if-exists || true
+fi
 if [ -n "$GEMINI_API_KEY" ] && [ "${VECTOR_SEARCH_MODE:-auto}" != "keyword" ]; then
-  (python scripts/index_knowledge.py > /tmp/index_knowledge.log 2>&1 || true) &
+  (python scripts/index_knowledge.py 2>&1 | sed 's/^/[index] /' || true) &
 fi
 exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" --proxy-headers --forwarded-allow-ips='*'

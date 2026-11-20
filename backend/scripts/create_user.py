@@ -13,6 +13,7 @@ from app.db.session import SessionLocal
 p = argparse.ArgumentParser()
 p.add_argument('--email', required=True); p.add_argument('--name'); p.add_argument('--role', choices=['technician', 'manager', 'admin'], required=True)
 p.add_argument('--org'); p.add_argument('--password')
+p.add_argument('--if-exists', action='store_true', help='only change an existing account; do nothing (exit 0) if the email is not registered')
 a = p.parse_args()
 db = SessionLocal()
 org = None
@@ -23,6 +24,8 @@ if u:
     u.role = a.role
     if org: u.organisation_id = org.id
     print(f'Updated {u.email}: role={u.role}')
+elif a.if_exists:
+    print('No account with that email yet; nothing changed. Register it in the app first.'); sys.exit(0)
 else:
     pw = a.password or getpass.getpass('Password: ')
     if len(pw) < 8: sys.exit('Password must be at least 8 characters.')

@@ -47,7 +47,7 @@ See `docs/DATASET_QUALITY_REPORT.md`, `docs/SOURCE_ATTRIBUTION.md` and `docs/RAG
 | `fixsaathi-copilot-api` | Python web service | `pip install -r backend/requirements.txt`, then `backend/scripts/render_start.sh`: migrations (upgrade only), idempotent load of the 377 records, background embedding index, then uvicorn on `0.0.0.0:$PORT`. Health check: `/ready`. |
 | `fixsaathi-copilot-db` | PostgreSQL 16 | `DATABASE_URL` is wired from the database (internal URL). No public access. Photos are stored here too (`STORAGE_PROVIDER=database`), because the free plan has no persistent disk. |
 
-Secrets are never in the repo: Render generates `SECRET_KEY`, and `GEMINI_API_KEY` is entered on the API service's **Environment** page (`sync: false`). Every push to `main` redeploys both services.
+Secrets are never in the repo: Render generates `SECRET_KEY`, and `GEMINI_API_KEY` is entered on the API service's **Environment** page (`sync: false`). Every push to `main` redeploys both services. To get a **manager** account (dashboard), register in the app, then set `BOOTSTRAP_MANAGER_EMAIL` to that email on the API service's Environment page; the next start promotes it (nothing happens if the email is not registered).
 
 **Free-plan limits:** the API sleeps after 15 minutes idle (first request then takes up to a minute), a workspace gets 750 instance-hours a month across all free services, and a free database expires 30 days after creation unless upgraded. `.github/workflows/keep-awake.yml` wakes the API on demand before a demo.
 
