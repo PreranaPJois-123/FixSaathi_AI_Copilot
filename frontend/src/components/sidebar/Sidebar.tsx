@@ -31,11 +31,6 @@ function bucket(iso?: string): (typeof BUCKETS)[number] {
 }
 
 const STATUS_DOT: Record<string, string> = { completed: 'bg-ok', cancelled: 'bg-ink-3', escalated: 'bg-warn', awaiting_confirmation: 'bg-warn' }
-function ago(iso?: string) {
-  if (!iso) return ''
-  const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
-  return m < 1 ? 'now' : m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`
-}
 
 function NavItem({ item, collapsed, onNavigate }: { item: Item; collapsed: boolean; onNavigate?: () => void }) {
   const Icon = item.icon
