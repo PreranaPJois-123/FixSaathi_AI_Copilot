@@ -11,6 +11,8 @@ const en = {
   cancel: 'Cancel', deleteChat: 'Delete chat', deleteFailed: 'Could not delete this chat.', renameFailed: 'Could not rename this chat.',
   account: 'Account', preferredLanguage: 'Preferred language', langNote: "Saved to your account. FixSaathi's AI replies and live voice use this language, and the app menus follow it too.",
   appearance: 'Appearance', appearanceNote: 'Applies instantly and is remembered on this device.', dark: 'Dark', light: 'Light', system: 'System default',
+  copy: 'Copy', copied: 'Copied', copyAnswer: 'Copy answer', aiNote: 'AI-generated, check before acting',
+  thinkRead: 'Reading your message', thinkKb: 'Checking the repair knowledge base', thinkGemini: 'Gemini is working on the answer', thinkBusy: 'Still working, Gemini is busy',
 }
 export type Key = keyof typeof en
 
@@ -23,6 +25,8 @@ const hi: Record<Key, string> = {
   cancel: 'रद्द करें', deleteChat: 'चैट हटाएँ', deleteFailed: 'यह चैट हटाई नहीं जा सकी।', renameFailed: 'नाम बदला नहीं जा सका।',
   account: 'खाता', preferredLanguage: 'पसंदीदा भाषा', langNote: 'आपके खाते में सहेजी जाती है। FixSaathi के AI उत्तर, लाइव वॉइस और ऐप के मेनू इसी भाषा में होंगे।',
   appearance: 'दिखावट', appearanceNote: 'तुरंत लागू होती है और इस डिवाइस पर याद रखी जाती है।', dark: 'डार्क', light: 'लाइट', system: 'सिस्टम डिफ़ॉल्ट',
+  copy: 'कॉपी', copied: 'कॉपी हो गया', copyAnswer: 'उत्तर कॉपी करें', aiNote: 'AI द्वारा बनाया गया, काम करने से पहले जाँचें',
+  thinkRead: 'आपका संदेश पढ़ रहे हैं', thinkKb: 'मरम्मत ज्ञान-आधार देख रहे हैं', thinkGemini: 'Gemini उत्तर तैयार कर रहा है', thinkBusy: 'अभी भी काम जारी है, Gemini व्यस्त है',
 }
 const kn: Record<Key, string> = {
   newChat: 'ಹೊಸ ಚಾಟ್', home: 'ಮುಖಪುಟ', searchChats: 'ಚಾಟ್‌ಗಳನ್ನು ಹುಡುಕಿ', noChats: 'ಇನ್ನೂ ಚಾಟ್‌ಗಳಿಲ್ಲ. ಮೇಲಿನಿಂದ ಪ್ರಾರಂಭಿಸಿ.', noMatch: 'ಯಾವುದೇ ಚಾಟ್ ಸಿಗಲಿಲ್ಲ.',
@@ -33,6 +37,8 @@ const kn: Record<Key, string> = {
   cancel: 'ರದ್ದುಮಾಡಿ', deleteChat: 'ಚಾಟ್ ಅಳಿಸಿ', deleteFailed: 'ಈ ಚಾಟ್ ಅಳಿಸಲು ಆಗಲಿಲ್ಲ.', renameFailed: 'ಹೆಸರು ಬದಲಿಸಲು ಆಗಲಿಲ್ಲ.',
   account: 'ಖಾತೆ', preferredLanguage: 'ಆದ್ಯತೆಯ ಭಾಷೆ', langNote: 'ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ ಉಳಿಸಲಾಗುತ್ತದೆ. FixSaathi ಯ AI ಉತ್ತರಗಳು, ಲೈವ್ ಧ್ವನಿ ಮತ್ತು ಆ್ಯಪ್ ಮೆನುಗಳು ಈ ಭಾಷೆಯಲ್ಲಿರುತ್ತವೆ.',
   appearance: 'ನೋಟ', appearanceNote: 'ತಕ್ಷಣ ಅನ್ವಯವಾಗುತ್ತದೆ ಮತ್ತು ಈ ಸಾಧನದಲ್ಲಿ ನೆನಪಿನಲ್ಲಿರುತ್ತದೆ.', dark: 'ಡಾರ್ಕ್', light: 'ಲೈಟ್', system: 'ಸಿಸ್ಟಮ್ ಡೀಫಾಲ್ಟ್',
+  copy: 'ನಕಲಿಸಿ', copied: 'ನಕಲಿಸಲಾಗಿದೆ', copyAnswer: 'ಉತ್ತರ ನಕಲಿಸಿ', aiNote: 'AI ರಚಿಸಿದ್ದು, ಕಾರ್ಯಗತಗೊಳಿಸುವ ಮೊದಲು ಪರಿಶೀಲಿಸಿ',
+  thinkRead: 'ನಿಮ್ಮ ಸಂದೇಶ ಓದುತ್ತಿದೆ', thinkKb: 'ದುರಸ್ತಿ ಜ್ಞಾನ ಭಂಡಾರ ಪರಿಶೀಲಿಸುತ್ತಿದೆ', thinkGemini: 'Gemini ಉತ್ತರ ಸಿದ್ಧಪಡಿಸುತ್ತಿದೆ', thinkBusy: 'ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ, Gemini ಬ್ಯುಸಿ ಆಗಿದೆ',
 }
 const ta: Record<Key, string> = {
   newChat: 'புதிய அரட்டை', home: 'முகப்பு', searchChats: 'அரட்டைகளைத் தேடு', noChats: 'இன்னும் அரட்டைகள் இல்லை. மேலே தொடங்குங்கள்.', noMatch: 'பொருந்தும் அரட்டை இல்லை.',
@@ -43,6 +49,8 @@ const ta: Record<Key, string> = {
   cancel: 'ரத்து செய்', deleteChat: 'அரட்டையை நீக்கு', deleteFailed: 'இந்த அரட்டையை நீக்க முடியவில்லை.', renameFailed: 'பெயரை மாற்ற முடியவில்லை.',
   account: 'கணக்கு', preferredLanguage: 'விருப்ப மொழி', langNote: 'உங்கள் கணக்கில் சேமிக்கப்படும். FixSaathi இன் AI பதில்கள், நேரடி குரல் மற்றும் செயலி மெனுக்கள் இந்த மொழியில் இருக்கும்.',
   appearance: 'தோற்றம்', appearanceNote: 'உடனே செயல்படும்; இந்தச் சாதனத்தில் நினைவில் இருக்கும்.', dark: 'டார்க்', light: 'லைட்', system: 'சிஸ்டம் இயல்புநிலை',
+  copy: 'நகலெடு', copied: 'நகலெடுக்கப்பட்டது', copyAnswer: 'பதிலை நகலெடு', aiNote: 'AI உருவாக்கியது, செயல்படும் முன் சரிபார்க்கவும்',
+  thinkRead: 'உங்கள் செய்தியைப் படிக்கிறது', thinkKb: 'பழுது அறிவுத் தளத்தைச் சரிபார்க்கிறது', thinkGemini: 'Gemini பதிலைத் தயாரிக்கிறது', thinkBusy: 'இன்னும் வேலை நடக்கிறது, Gemini பிஸியாக உள்ளது',
 }
 const dict: Record<Language, Record<Key, string>> = { English: en, Hindi: hi, Kannada: kn, Tamil: ta }
 
