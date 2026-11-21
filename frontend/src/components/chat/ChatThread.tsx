@@ -11,6 +11,7 @@ import { Markdown } from './Markdown'
 import { DocChip } from '../composer/Composer'
 import { openFile } from '../../utils/openFile'
 import { speakable } from '../../utils/text'
+import { useT } from '../../i18n'
 
 const time = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
@@ -19,12 +20,14 @@ function Avatar() {
 }
 
 function CopyButton({ text }: { text: string }) {
+  const t = useT()
   const [ok, setOk] = useState(false)
   const copy = async () => { try { await navigator.clipboard.writeText(speakable(text)); setOk(true); setTimeout(() => setOk(false), 1500) } catch { /* clipboard blocked */ } }
-  return <button onClick={copy} aria-label="Copy answer" title="Copy answer" className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink">{ok ? <Check size={12} className="text-ok" /> : <Copy size={12} />}{ok ? 'Copied' : 'Copy'}</button>
+  return <button onClick={copy} aria-label={t('copyAnswer')} title={t('copyAnswer')} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink">{ok ? <Check size={12} className="text-ok" /> : <Copy size={12} />}{ok ? t('copied') : t('copy')}</button>
 }
 
 function Bubble({ m }: { m: ChatMessage }) {
+  const t = useT()
   if (m.role === 'system') {
     return (
       <div role="status" className="mx-auto flex max-w-xl items-start gap-3 rounded-2xl border border-warn/35 bg-warn/[0.07] px-4 py-3.5 text-sm text-warn">
@@ -50,7 +53,7 @@ function Bubble({ m }: { m: ChatMessage }) {
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }} className="flex justify-end">
         <div className="flex max-w-[85%] flex-col items-end sm:max-w-[72%]">
           {photos}
-          {m.text && <div className="whitespace-pre-wrap rounded-[22px] rounded-br-md border border-line-2 bg-gradient-to-b from-surface-3 to-surface-2 px-4 py-2.5 text-[15px] leading-relaxed text-ink shadow-[0_10px_30px_-18px_rgba(0,0,0,.8)]">{m.text}</div>}
+          {m.text && <div className="whitespace-pre-wrap rounded-[22px] rounded-br-md border border-teal/25 bg-gradient-to-b from-surface-3 to-surface-2 px-4 py-2.5 text-[15px] leading-relaxed text-ink shadow-[0_10px_30px_-18px_rgba(0,0,0,.8)]">{m.text}</div>}
           <span className="mt-1 px-1 text-[11px] text-ink-3">{time(m.at)}</span>
         </div>
       </motion.div>
@@ -65,7 +68,7 @@ function Bubble({ m }: { m: ChatMessage }) {
         {photos}
         {m.text && <Markdown text={m.text} sources={m.sources} />}
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-ink-3">
-          {m.aiGenerated && <span className="inline-flex items-center gap-1"><Sparkles size={11} className="text-teal" />AI-generated, check before acting</span>}
+          {m.aiGenerated && <span className="inline-flex items-center gap-1"><Sparkles size={11} className="text-teal" />{t('aiNote')}</span>}
           {m.text && <CopyButton text={m.text} />}
         </div>
         {m.sources && m.sources.length > 0 && <SourceList sources={m.sources} />}
@@ -75,10 +78,11 @@ function Bubble({ m }: { m: ChatMessage }) {
 }
 
 function ThinkingLabel({ progress }: { progress: string | null }) {
+  const tr = useT()
   const [t, setT] = useState(0)
   useEffect(() => { const id = setInterval(() => setT(x => x + 1), 1000); return () => clearInterval(id) }, [])
   if (progress) return <span className="text-sm"><span className="text-shimmer font-medium">{progress}...</span></span>
-  const phase = t < 3 ? 'Reading your message' : t < 8 ? 'Checking the repair knowledge base' : t < 20 ? 'Gemini is working on the answer' : 'Still working, Gemini is busy'
+  const phase = t < 3 ? tr('thinkRead') : t < 8 ? tr('thinkKb') : t < 20 ? tr('thinkGemini') : tr('thinkBusy')
   return <span className="text-sm tabular-nums"><span className="text-shimmer font-medium">{phase}...</span> <span className="text-ink-3">{t}s</span></span>
 }
 
