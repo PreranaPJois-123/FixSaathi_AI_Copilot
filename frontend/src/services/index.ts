@@ -26,6 +26,7 @@ export const sessionService = {
   get: (id: string) => api<RepairSession>(`/api/v1/sessions/${id}`),
   list: (limit = 20, status?: string) => api<Page<RepairSession>>(`/api/v1/sessions?limit=${limit}${status ? `&status=${status}` : ''}`),
   cancel: (id: string) => api<RepairSession>(`/api/v1/sessions/${id}/cancel`, { method: 'POST' }),
+  rename: (id: string, title: string) => api<RepairSession>(`/api/v1/sessions/${id}`, { method: 'PATCH', body: { title } }),
 }
 
 export interface DemoScenario { id: string; title: string; appliance: string; issue: string; has_photo: boolean }

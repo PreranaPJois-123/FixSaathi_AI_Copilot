@@ -9,7 +9,7 @@ import { useLiveVoice } from '../hooks/useLiveVoice'
 import { useBrowserVoice } from '../hooks/useBrowserVoice'
 import { useAuth } from '../context/AuthContext'
 import { useApp } from '../context/AppContext'
-import { sessionService } from '../services'
+import { sessionService, systemService } from '../services'
 import { speakable } from '../utils/text'
 import type { VoiceState } from '../types'
 
@@ -32,6 +32,9 @@ export default function VoicePage() {
   const bv = useBrowserVoice()
   const [mode, setMode] = useState<'live' | 'browser'>('live')
   const tried = useRef(false)
+  // Ask the server once whether Gemini Live is available. If not, go straight to browser voice (no failed Live attempt first).
+  const [liveOff, setLiveOff] = useState(false)
+  useEffect(() => { let on = true; systemService.ai().then(a => { if (on && !a.models?.live) setLiveOff(true) }).catch(() => {}); return () => { on = false } }, [])
   const v = mode === 'browser' ? bv : lv
   const video = useRef<HTMLVideoElement>(null)
   const [text, setText] = useState('')
@@ -42,6 +45,7 @@ export default function VoicePage() {
     let id = sid
     if (!id) { const s = await sessionService.create('Live voice session'); id = s.id; setSid(id); setParams({ session: id }, { replace: true }) }
     tried.current = false
+    if (liveOff && bv.supported) { tried.current = true; setMode('browser'); await bv.start(id, user?.preferred_language); return }
     await v.start(id, user?.preferred_language)
   }
   // The Live model is not available to every API key. Fall back to browser speech so voice still works.
