@@ -3,8 +3,8 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from ...core.exceptions import AppError, NotFound
-from ...db.models import Conversation, Media, RepairSession, User
+from ...core.exceptions import AppError, Conflict, NotFound
+from ...db.models import Conversation, Media, RepairSession, ServiceReport, User
 from ...db.session import get_db
 from ...dependencies import current_user
 from ...integrations.storage.local import get_storage
@@ -50,6 +50,24 @@ def patch_session(session_id: uuid.UUID, body: SessionPatch, u: User = Depends(c
         setattr(s, k, v)
     db.flush()
     return session_out(db, s)
+
+
+@router.delete('/sessions/{session_id}', status_code=204)
+def delete_session(session_id: uuid.UUID, u: User = Depends(current_user), db: Session = Depends(get_db, scope="function")):
+    """Owner-only delete of a chat. A session that already has a filed service report is a work record and is kept."""
+    s = get_owned_session(db, u, session_id, lock=True)
+    if db.scalar(select(func.count()).select_from(ServiceReport).where(ServiceReport.session_id == s.id)):
+        raise Conflict('This session has a service report, so it is kept as a work record.', code='HAS_REPORT')
+    keys = list(db.scalars(select(Media.storage_key).where(Media.session_id == s.id)))
+    db.delete(s)
+    db.flush()
+    store = get_storage()
+    for k in keys:
+        try:
+            store.delete(k)
+        except Exception:
+            pass  # a missing file must not block removing the chat
+    return Response(status_code=204)
 
 
 @router.post('/sessions/{session_id}/cancel', response_model=SessionOut)
