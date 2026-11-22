@@ -44,6 +44,10 @@ export interface ChatMessage {
   notice?: 'ai_unavailable' | 'ai_error'
   hint?: string | null
   errorCode?: string
+  /** A server-side action attached to the message, e.g. a repair report PDF ready to download. */
+  action?: 'pdf_report'
+  /** How the message being answered was sent. Only replies to voice messages are read aloud by themselves. */
+  channel?: 'text' | 'voice'
 }
 
 export type VoiceState = 'idle' | 'connecting' | 'listening' | 'processing' | 'responding' | 'error'

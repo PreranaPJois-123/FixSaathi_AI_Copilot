@@ -1,6 +1,6 @@
 """Every provider failure maps to a specific, safe category. Uses the SDK's real error classes."""
 import asyncio
-import httpx, pytest
+import httpx, httpx2, pytest
 from google.genai import errors
 from app.config import get_settings
 from app.integrations.gemini.client import GeminiClient
@@ -23,6 +23,9 @@ def api(code, status, msg, details=None):
     (api(503, 'UNAVAILABLE', 'The model is overloaded.'), 'PROVIDER_UNAVAILABLE', True),
     (asyncio.TimeoutError(), 'AI_TIMEOUT', True),
     (httpx.ConnectError('dns failure'), 'NETWORK_ERROR', True),
+    (httpx2.ConnectError('connection reset'), 'NETWORK_ERROR', True),  # google-genai 3.x transport
+    (httpx2.RemoteProtocolError('peer closed connection'), 'NETWORK_ERROR', True),
+    (httpx2.ReadTimeout('read timed out'), 'AI_TIMEOUT', True),
     (ValueError('boom'), 'AI_INTERNAL_ERROR', False),
 ])
 def test_classify(exc, expected, retry):
@@ -231,3 +234,115 @@ def test_schema_too_complex_retries_same_model_with_relaxed_schema(monkeypatch):
     with pytest.raises(AIError) as e:
         asyncio.run(g.generate_json('diagnosis', Out, 'hi', 'sys'))
     assert e.value.code == 'AI_INVALID_OUTPUT'
+
+
+def _fake_models(behaviour, used):
+    class Models:
+        async def generate_content(self, model, contents, config):
+            used.append(model)
+            return await behaviour(model)
+    return type('C', (), {'aio': type('A', (), {'models': Models()})()})()
+
+
+def test_overloaded_model_fails_over_without_retrying_it(monkeypatch):
+    """Live log 21 Nov: a 504/503 from the agent model was retried on the same model (45 s + 45 s) instead of trying the fallback."""
+    from google.genai import errors as ge
+    from app.integrations.gemini import client as gc
+    s = get_settings()
+    monkeypatch.setattr(s, 'gemini_api_key', 'test'); monkeypatch.setattr(s, 'gemini_agent_model', 'a')
+    monkeypatch.setattr(s, 'gemini_agent_fallback_models', 'b'); monkeypatch.setattr(s, 'gemini_max_retries', 1)
+    monkeypatch.setattr(s, 'gemini_thinking_level', ''); monkeypatch.setattr(s, 'gemini_hedge_seconds', 0)
+    used = []
+
+    async def behaviour(model):
+        if model == 'a':
+            raise ge.ServerError(503, {'error': {'code': 503, 'status': 'UNAVAILABLE', 'message': 'This model is currently experiencing high demand.'}})
+        r = type('R', (), {'text': 'from b', 'candidates': [object()], 'prompt_feedback': None, 'usage_metadata': None})
+        return r()
+    g = gc.GeminiClient(); g._client = _fake_models(behaviour, used)
+    text, meta = asyncio.run(g.generate_text('diagnosis_text', 'hi', 'sys'))
+    assert text == 'from b' and used == ['a', 'b']
+    used.clear()
+    asyncio.run(g.generate_text('diagnosis_text', 'again', 'sys'))
+    assert used == ['b']  # the overloaded model cools down briefly
+    gc.COOLDOWN.clear()
+
+
+def test_slow_chat_reply_is_hedged_with_the_fallback(monkeypatch):
+    import time as _t
+    from app.integrations.gemini import client as gc
+    s = get_settings()
+    monkeypatch.setattr(s, 'gemini_api_key', 'test'); monkeypatch.setattr(s, 'gemini_agent_model', 'slow')
+    monkeypatch.setattr(s, 'gemini_agent_fallback_models', 'quick'); monkeypatch.setattr(s, 'gemini_max_retries', 0)
+    monkeypatch.setattr(s, 'gemini_thinking_level', ''); monkeypatch.setattr(s, 'gemini_hedge_seconds', 0.05)
+    used, cancelled = [], []
+
+    async def behaviour(model):
+        try:
+            await asyncio.sleep(5 if model == 'slow' else 0.01)
+        except asyncio.CancelledError:
+            cancelled.append(model); raise
+        return type('R', (), {'text': f'from {model}', 'candidates': [object()], 'prompt_feedback': None, 'usage_metadata': None})()
+    g = gc.GeminiClient(); g._client = _fake_models(behaviour, used)
+    t0 = _t.perf_counter()
+    text, meta = asyncio.run(g.generate_text('chat', 'hi', 'sys'))
+    assert text == 'from quick' and meta.model == 'quick' and used == ['slow', 'quick'] and cancelled == ['slow'] and _t.perf_counter() - t0 < 1
+
+
+def test_fast_chat_reply_is_not_hedged(monkeypatch):
+    from app.integrations.gemini import client as gc
+    s = get_settings()
+    monkeypatch.setattr(s, 'gemini_api_key', 'test'); monkeypatch.setattr(s, 'gemini_agent_model', 'a')
+    monkeypatch.setattr(s, 'gemini_agent_fallback_models', 'b'); monkeypatch.setattr(s, 'gemini_thinking_level', '')
+    monkeypatch.setattr(s, 'gemini_hedge_seconds', 5)
+    used = []
+
+    async def behaviour(model):
+        return type('R', (), {'text': 'ok', 'candidates': [object()], 'prompt_feedback': None, 'usage_metadata': None})()
+    g = gc.GeminiClient(); g._client = _fake_models(behaviour, used)
+    text, meta = asyncio.run(g.generate_text('chat', 'hi', 'sys'))
+    assert meta.model == 'a' and used == ['a']
+
+
+def test_relaxed_schema_is_remembered_per_model(monkeypatch):
+    """Live log 21 Nov: every diagnosis on gemini-3.1-flash-lite cost a rejected call before the relaxed one."""
+    from google.genai import errors as ge
+    from pydantic import BaseModel, Field
+    from app.integrations.gemini import client as gc
+    s = get_settings()
+    monkeypatch.setattr(s, 'gemini_api_key', 'test'); monkeypatch.setattr(s, 'gemini_agent_model', 'lite')
+    monkeypatch.setattr(s, 'gemini_agent_fallback_models', ''); monkeypatch.setattr(s, 'gemini_max_retries', 0)
+
+    class Out(BaseModel):
+        items: list[str] = Field(max_length=2)
+    seen = []
+
+    class Models:
+        async def generate_content(self, model, contents, config):
+            full = 'maxItems' in str(config.response_json_schema); seen.append(full)
+            if full:
+                raise ge.ClientError(400, {'error': {'code': 400, 'status': 'INVALID_ARGUMENT', 'message': 'schema produces a constraint that has too many states'}})
+            return type('R', (), {'text': '{"items": ["a"]}', 'candidates': [object()], 'prompt_feedback': None, 'usage_metadata': None})()
+    g = gc.GeminiClient(); g._client = type('C', (), {'aio': type('A', (), {'models': Models()})()})()
+    asyncio.run(g.generate_json('diagnosis', Out, 'hi', 'sys'))
+    asyncio.run(g.generate_json('diagnosis', Out, 'again', 'sys'))
+    assert seen == [True, False, False]  # one rejected call in total, not one per diagnosis
+
+
+def test_daily_quota_is_not_retried(monkeypatch):
+    from google.genai import errors as ge
+    calls = {'n': 0}
+
+    async def daily():
+        calls['n'] += 1
+        raise ge.ClientError(429, {'error': {'code': 429, 'status': 'RESOURCE_EXHAUSTED', 'message': 'Quota exceeded for metric: generate_content_free_tier_requests, limit: 20. Please retry in 58084.5s.'}})
+    monkeypatch.setenv('GEMINI_MAX_RETRIES', '2'); get_settings.cache_clear()
+    slept = []
+
+    async def fake_sleep(t):
+        slept.append(t)
+    monkeypatch.setattr('app.integrations.gemini.client.asyncio.sleep', fake_sleep)
+    g = GeminiClient(client=object())
+    with pytest.raises(Exception) as e:
+        asyncio.run(g._call('chat', 'm', daily))
+    assert e.value.code == 'QUOTA_EXCEEDED' and calls['n'] == 1 and slept == []

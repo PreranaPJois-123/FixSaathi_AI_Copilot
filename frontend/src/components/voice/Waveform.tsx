@@ -1,17 +1,39 @@
-import type { VoiceState } from '../../types'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { speech } from '../../services/speech'
 
-const BARS = 28
-export function Waveform({ state }: { state: VoiceState }) {
-  const active = state === 'listening' || state === 'responding'
-  const processing = state === 'processing'
+const BARS = 32
+
+/** Bars driven by the real microphone level (newest on the right), so the technician can see that they are being heard. */
+export function LiveWaveform({ level, className = '' }: { level: () => number; className?: string }) {
+  const bars = useRef<(HTMLSpanElement | null)[]>([])
+  useEffect(() => {
+    const hist = new Array(BARS).fill(0)
+    let raf = 0; let last = 0
+    const tick = (t: number) => {
+      raf = requestAnimationFrame(tick)
+      if (t - last < 55) return
+      last = t
+      hist.shift(); hist.push(level())
+      hist.forEach((v, i) => { const el = bars.current[i]; if (el) el.style.transform = `scaleY(${Math.max(0.12, Math.min(1, v * 1.4))})` })
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [level])
   return (
-    <div className="flex h-24 items-center justify-center gap-[5px]" aria-hidden>
-      {Array.from({ length: BARS }).map((_, i) => {
-        const mid = 1 - Math.abs(i - BARS / 2) / (BARS / 2)
-        return <span key={i} className={`w-[5px] rounded-full ${state === 'error' ? 'bg-crit/60' : 'fs-grad-bg'}`}
-          style={{ height: `${18 + mid * 62}%`, transformOrigin: 'center', transform: active || processing ? undefined : 'scaleY(.18)', opacity: active ? 1 : processing ? 0.7 : 0.45,
-            animation: active ? `fs-wave ${0.7 + (i % 5) * 0.12}s ease-in-out ${i * 0.03}s infinite` : processing ? `fs-wave 1.6s ease-in-out ${i * 0.06}s infinite` : undefined }} />
-      })}
+    <div className={`flex h-8 items-center gap-[3px] ${className}`} aria-hidden>
+      {Array.from({ length: BARS }).map((_, i) => <span key={i} ref={el => { bars.current[i] = el }} className="h-full w-[3px] origin-center rounded-full bg-accent transition-transform duration-75" style={{ transform: 'scaleY(.12)' }} />)}
     </div>
   )
+}
+
+/** True while FixSaathi is preparing or reading a reply aloud. */
+export function useSpeaking() {
+  return useSyncExternalStore(cb => speech.subscribe(cb), () => speech.isSpeaking(), () => false)
+}
+
+/** 'preparing' while the natural voice is being generated, then 'speaking'; and which engine is speaking. */
+export function useSpeechPhase() {
+  const phase = useSyncExternalStore(cb => speech.subscribe(cb), () => speech.phase(), () => 'idle' as const)
+  const engine = useSyncExternalStore(cb => speech.subscribe(cb), () => speech.engine(), () => null)
+  return { phase, engine }
 }

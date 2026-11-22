@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     nano_banana_model: str | None = None
     gemini_timeout_seconds: float = 45
     gemini_max_retries: int = 1
+    # Chat replies only: seconds before the first fallback model is also asked (0 disables). See HEDGED_OPS in the Gemini client.
+    gemini_hedge_seconds: float = 12
+    # Spoken replies (Gemini text-to-speech). Empty: the app speaks with the browser's voice instead.
+    gemini_tts_model: str | None = None
+    # One of TTS_VOICES in the Gemini client. Charon: chosen 21 Nov from six measured samples (see docs/VOICE.md).
+    gemini_tts_voice: str = 'Charon'
 
     storage_provider: str = 'local'
     local_storage_path: str = 'uploads'
@@ -48,7 +54,7 @@ class Settings(BaseSettings):
     live_idle_timeout_seconds: int = 300
     auth_rate_limit_per_minute: int = 10
 
-    @field_validator('gemini_api_key', 'gemini_live_model', 'gemini_agent_model', 'gemini_embed_model', 'nano_banana_model', mode='before')
+    @field_validator('gemini_api_key', 'gemini_live_model', 'gemini_agent_model', 'gemini_embed_model', 'nano_banana_model', 'gemini_tts_model', mode='before')
     @classmethod
     def _strip(cls, v):
         # A key pasted with quotes, spaces or a newline is a common cause of 'API key not valid'.

@@ -7,6 +7,7 @@ export function Markdown({ text, sources = [] }: { text: string; sources?: Sourc
   const index = new Map(sources.map((s, i) => [s.record_id, i + 1]))
   const inl = (items: Inline[]) => items.map((x, i) => {
     if (x.t === 'bold') return <strong key={i}>{x.v}</strong>
+    if (x.t === 'italic') return <em key={i}>{x.v}</em>
     if (x.t === 'code') return <code key={i}>{x.v}</code>
     if (x.t === 'cite') {
       const n = index.get(x.v)

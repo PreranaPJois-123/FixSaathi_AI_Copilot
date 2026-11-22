@@ -16,7 +16,7 @@ export default function DemoPage() {
   const [err, setErr] = useState<string | null>(null)
   const start = async (id: string) => {
     setBusy(id); setErr(null)
-    try { const s = await demoService.start(id); await openSession(s.id); nav(`/assistant?session=${s.id}`) }
+    try { const s = await demoService.start(id); await openSession(s.id); nav(`/chat/${s.id}`) }
     catch (e) { setErr((e as Error).message || 'Could not start the demo.') } finally { setBusy(null) }
   }
   return (

@@ -53,7 +53,7 @@ def clean(migrate):
     with engine().begin() as c:
         c.execute(text('TRUNCATE ' + ', '.join(t.name for t in reversed(Base.metadata.sorted_tables)) + ' RESTART IDENTITY CASCADE'))
     from app.core.security import auth_limiter
-    auth_limiter.hits.clear(); reset_storage(); gclient.set_gemini(None); gclient.COOLDOWN.clear(); get_settings.cache_clear()
+    auth_limiter.hits.clear(); reset_storage(); gclient.set_gemini(None); gclient.COOLDOWN.clear(); gclient.RELAXED_SCHEMA.clear(); get_settings.cache_clear()
     yield
     gclient.set_gemini(None)
 

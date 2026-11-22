@@ -10,9 +10,13 @@ Base: `/api/v1`. Errors always look like `{"error": {"code", "message", "details
 | SettingsPage → language | `PATCH /users/me` | users.preferred_language |
 | AppContext.send (first message) | `POST /sessions` | repair_sessions |
 | Composer / CameraModal → photo | `POST /sessions/{id}/images` (multipart) | media + file in storage |
-| AppContext.send | `POST /sessions/{id}/messages` | conversations (user + AI reply) |
-| AssistantPage (open existing) | `GET /sessions/{id}/messages` | |
-| Sidebar recent, History, My Repairs | `GET /sessions`, `GET /history?open_only=` | |
+| AppContext.send | `POST /sessions/{id}/messages` (a request for a report/PDF is answered by the server, not Gemini: `meta.action = pdf_report`) | conversations (user + AI reply) |
+| ChatPage `/chat/:id` (open existing) | `GET /sessions/{id}`, `GET /sessions/{id}/messages` | |
+| Sidebar chat history and search | `GET /sessions?mine=true&q=` (searches titles, issue and message text; hidden chats excluded) | |
+| Sidebar → Rename | `PATCH /sessions/{id}` with `{title}` (allowed on closed sessions too) | repair_sessions.title |
+| Sidebar → Delete | `DELETE /sessions/{id}` (soft: sets `hidden_at`, cancels an open session; reports and safety log kept) | repair_sessions.hidden_at |
+| Chat / workspace / report → Download PDF | `GET /sessions/{id}/report.pdf` (built from recorded data; locked power-step instructions withheld) | |
+| History, My Repairs | `GET /history?open_only=` | |
 | RepairSessionPage → Run diagnosis | `POST /sessions/{id}/diagnose`, `GET .../diagnosis` | diagnosis_results, ai_usage |
 | → Identify component | `POST /sessions/{id}/identify-component` | identified_components |
 | → Generate steps | `POST /sessions/{id}/steps/generate`, `GET .../steps` | repair_steps |

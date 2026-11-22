@@ -222,3 +222,121 @@ def test_consecutive_withheld_steps_collapse(client, tech, session_id, fake):
     _chat(client, tech, session_id)
     m = _assistant(session_id).message
     assert m.count('power-sensitive step withheld: see') == 1 and 'canopy' not in m
+
+
+# ---------- causes stay visible, only power work is withheld (live replies 21 Nov hid whole cause lists) ----------
+
+FRIDGE_REPLY = ('A clicking sound from the compressor usually means the overload protector (OLP) is tripping.\n\n'
+                '**Likely Causes:**\n'
+                '1. **Faulty PTC starter relay or OLP** (burnt or cracked ceramic disc).\n'
+                '2. **Weak start capacitor** on the compressor terminals.\n'
+                '3. **Low supply voltage** under load.\n\n'
+                '**Step-by-Step Checks:**\n'
+                '1. Listen for the compressor clicking every few minutes and note the interval.\n'
+                '2. Note any error code on the display panel.\n'
+                '3. Unplug the fridge, remove the relay cover and pull the PTC relay off the compressor terminals.\n'
+                '4. Measure the relay with a multimeter for continuity.\n\n'
+                'Check the relay first and tell me if it rattles!')
+
+
+def test_chat_cause_list_stays_visible_while_power_steps_are_withheld(client, tech, session_id, fake):
+    fake.text = FRIDGE_REPLY
+    _chat(client, tech, session_id, 'Fridge not cooling, compressor clicks')
+    m = _assistant(session_id)
+    # suspected causes and the diagnosis: visible
+    for kept in ('Faulty PTC starter relay or OLP', 'Weak start capacitor', 'Low supply voltage', 'overload protector (OLP) is tripping'):
+        assert kept in m.message, kept
+    # safe, non-electrical checks: visible
+    assert 'Listen for the compressor clicking' in m.message and 'error code on the display panel' in m.message
+    # power-sensitive work: withheld on the server and never stored
+    assert 'pull the PTC relay off' not in m.message and 'multimeter' not in m.message and 'remove the relay cover' not in m.message
+    assert 'Check the relay first' not in m.message  # reaching the relay means opening the compressor terminal cover
+    assert m.message.count('power-sensitive step withheld: see') == 2 and 'Power-sensitive step withheld' in m.message
+    assert m.meta['safety_withheld'] == 3 and m.meta['safety_reason'] == 'SAFETY_CONFIRMATION_REQUIRED'
+
+
+def test_chat_cause_list_without_heading_and_inline_instruction(client, tech, session_id, fake):
+    fake.text = ('Here are the most likely causes to check:\n'
+                 '- Worn drive belt or seized drum bearing.\n'
+                 '- Faulty motor capacitor — measure it with a multimeter after discharging it.\n'
+                 '- Stuck door lock.\n\n'
+                 'Next steps:\n'
+                 '- Spin the drum by hand with the machine unplugged.\n'
+                 '- Remove the back panel and check the belt.')
+    _chat(client, tech, session_id, 'Washer drum not spinning, motor hums')
+    m = _assistant(session_id).message
+    assert 'Worn drive belt or seized drum bearing' in m and 'Faulty motor capacitor —' in m and 'Stuck door lock' in m
+    assert 'Spin the drum by hand' in m
+    assert 'discharging' not in m and 'Remove the back panel' not in m
+
+
+def test_fault_named_items_are_causes_even_without_a_heading(client, tech, session_id, fake):
+    fake.text = '1. Weak capacitor.\n2. Worn bearings.\n3. Open the canopy and replace the capacitor.'
+    _chat(client, tech, session_id)
+    m = _assistant(session_id).message
+    assert 'Weak capacitor.' in m and 'Worn bearings.' in m and 'Open the canopy' not in m
+
+
+def test_checking_a_live_part_in_prose_is_withheld(client, tech, session_id, fake):
+    fake.text = 'A weak capacitor is the likely cause. Check the capacitor terminals for burn marks.'
+    _chat(client, tech, session_id)
+    m = _assistant(session_id).message
+    assert 'weak capacitor is the likely cause' in m and 'burn marks' not in m and 'Power-sensitive step withheld' in m
+
+
+def test_cause_list_full_reply_after_both_confirmations(client, tech, session_id, fake):
+    client.post(f'/api/v1/sessions/{session_id}/safety/confirm', json=CONFIRM, headers=tech['h'])
+    fake.text = FRIDGE_REPLY
+    _chat(client, tech, session_id, 'Fridge not cooling')
+    m = _assistant(session_id)
+    assert m.message == FRIDGE_REPLY and m.meta['safety_withheld'] == 0
+
+
+def test_one_confirmation_is_not_enough(client, tech, session_id, fake):
+    client.post(f'/api/v1/sessions/{session_id}/safety/confirm', json={'power_off_confirmed': True, 'tester_checked': False}, headers=tech['h'])
+    fake.text = FRIDGE_REPLY
+    _chat(client, tech, session_id, 'Fridge not cooling')
+    m = _assistant(session_id).message
+    assert 'multimeter' not in m and 'Faulty PTC starter relay' in m
+
+
+@pytest.mark.parametrize('text', ['Note the error code on the display panel.', 'Listen for the compressor clicking.',
+                                  'Spin the blades by hand.', 'Check the regulator at every setting.', 'Watch whether the compressor starts after the click.'])
+def test_safe_steps_pass_the_step_rule(text):
+    from app.core.power_rules import step_text_needs_power_off
+    assert not step_text_needs_power_off(text)
+
+
+@pytest.mark.parametrize('text', ['Note the microfarad rating printed on the existing capacitor.', 'Tighten the motor mounting bolts.',
+                                  'Feel whether the compressor body is hot.', 'Check the wiring at the terminal block.',
+                                  'Lower the canopy to expose the capacitor housing.', 'Never open the cabinet, then touch the board.',
+                                  'Unplug the PTC starter from the compressor and shake it.', 'Clean the drain pump filter at the front.',
+                                  'Look inside the motor housing for burn marks.'])
+def test_power_steps_fail_the_step_rule(text):
+    from app.core.power_rules import step_text_needs_power_off
+    assert step_text_needs_power_off(text)
+
+
+LIVE_REPLY_21_NOV = (  # gemini-3.6-flash, verbatim shape: causes as bold items, what-to-do as indented sub-items
+    'When the compressor clicks every few minutes, it usually means the compressor is tripping on the overload protector (OLP).\n\n'
+    '**Safety First:** Before removing the terminal cover or touching any wiring, switch off at the MCB and test with your meter.\n\n'
+    'Here are the most likely causes and what to check:\n\n'
+    '1. **Defective Start Relay / PTC Starter:** \n'
+    ' - Unplug the PTC starter from the compressor and shake it. If it rattles inside, the ceramic disc is shattered and needs replacement.\n'
+    '2. **Faulty Run Capacitor (if fitted):** \n'
+    ' - Check the capacitor for bulging or leaking oil.\n'
+    '3. **Incorrect Supply Voltage:** \n'
+    ' - Check the socket voltage with the fridge running. Low voltage prevents the compressor from starting.\n'
+    '4. **Seized / Locked Rotor Compressor:** \n'
+    ' - Measure the winding resistance between the C, S and R pins.')
+
+
+def test_live_reply_causes_visible_and_sub_item_instructions_withheld(client, tech, session_id, fake):
+    fake.text = LIVE_REPLY_21_NOV
+    _chat(client, tech, session_id, 'Fridge compressor clicks')
+    m = _assistant(session_id).message
+    for kept in ('Defective Start Relay / PTC Starter', 'Faulty Run Capacitor', 'Incorrect Supply Voltage', 'Seized / Locked Rotor Compressor',
+                 'tripping on the overload protector'):
+        assert kept in m, kept
+    for gone in ('Unplug the PTC starter', 'shake it', 'bulging or leaking', 'winding resistance'):
+        assert gone not in m, gone

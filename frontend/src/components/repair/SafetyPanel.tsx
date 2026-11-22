@@ -7,7 +7,7 @@ export function SafetyPanel({ state, busy, canEdit, onChange }: Props) {
   const power = state?.power_off_confirmed ?? false
   const tester = state?.tester_checked ?? false
   const both = !!state?.unlocked
-  const box = 'mt-0.5 h-5 w-5 shrink-0 accent-[#2dd4bf]'
+  const box = 'mt-0.5 h-5 w-5 shrink-0 accent-[var(--color-accent)]'
   return (
     <section aria-labelledby="safety-h" className={`relative overflow-hidden rounded-[1.25rem] border p-5 md:p-6 ${both ? 'border-ok/35 bg-gradient-to-b from-ok/[0.08] to-ok/[0.02]' : 'border-crit/35 bg-gradient-to-b from-crit/[0.08] to-crit/[0.02]'}`}>
       <h2 id="safety-h" className="flex items-center gap-2.5 text-[15px] font-semibold"><span className={`flex h-8 w-8 items-center justify-center rounded-xl ${both ? 'bg-ok/15 text-ok' : 'bg-crit/15 text-crit'}`}><ShieldAlert size={17} /></span>Safety before opening anything{busy && <Loader2 size={14} className="animate-spin text-ink-3" />}</h2>

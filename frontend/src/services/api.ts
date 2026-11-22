@@ -45,14 +45,22 @@ export async function refreshTokens(): Promise<boolean> { return (await refreshD
 export async function refreshDetailed(): Promise<RefreshResult> {
   const rt = tokens.refresh()
   if (!rt) return 'invalid'
+  const attempt = async (sent: string, again: boolean): Promise<RefreshResult> => {
+    const r = await fetch(`${BASE}/api/v1/auth/refresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: sent }) })
+    if (r.status === 401 || r.status === 422) {
+      // Refresh tokens rotate. If another tab refreshed while this request was in flight, localStorage already holds the
+      // new token: use it rather than clearing it, which would sign every tab out.
+      const latest = tokens.refresh()
+      if (!again && latest && latest !== sent) return attempt(latest, true)
+      if (tokens.refresh() === sent) tokens.clear()
+      return 'invalid'
+    }
+    if (!r.ok) return 'transient'  // e.g. 502/503 while the server wakes up: do NOT sign the user out
+    const d = await r.json() as { access_token: string; refresh_token: string }
+    tokens.set(d.access_token, d.refresh_token); return 'ok'
+  }
   refreshing ??= (async (): Promise<RefreshResult> => {
-    try {
-      const r = await fetch(`${BASE}/api/v1/auth/refresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: rt }) })
-      if (r.status === 401 || r.status === 422) { tokens.clear(); return 'invalid' }
-      if (!r.ok) return 'transient'  // e.g. 502/503 while the server wakes up: do NOT sign the user out
-      const d = await r.json() as { access_token: string; refresh_token: string }
-      tokens.set(d.access_token, d.refresh_token); return 'ok'
-    } catch { return 'transient' } finally { setTimeout(() => { refreshing = null }, 0) }
+    try { return await attempt(rt, false) } catch { return 'transient' } finally { setTimeout(() => { refreshing = null }, 0) }
   })()
   return refreshing
 }

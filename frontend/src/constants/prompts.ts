@@ -1,9 +1,12 @@
-/** Quick-start prompts shown on the welcome screen. These are suggestions, not data. */
-export const suggestions = [
-  { label: 'Diagnose an AC problem', prompt: "My split AC is running, but it isn't cooling properly.", appliance: 'split_ac' },
-  { label: 'Inspect a ceiling fan', prompt: 'My ceiling fan is slow and hums but does not spin fully.', appliance: 'ceiling_fan' },
-  { label: 'Troubleshoot a washing machine', prompt: 'My washing machine is making a loud noise during spinning.', appliance: 'washing_machine' },
-  { label: 'Identify an electrical component', prompt: 'Help me identify this component.', appliance: 'mcb_electrical' },
+import type { Key } from '../i18n'
+
+/** Quick-start prompts shown on the welcome screen. These are suggestions, not data. The label is translated; the prompt sent stays English,
+ *  because the server already answers in the technician's language. */
+export const suggestions: { key: Key; prompt: string; appliance: string }[] = [
+  { key: 'sug.ac', prompt: "My split AC is running, but it isn't cooling properly.", appliance: 'split_ac' },
+  { key: 'sug.fan', prompt: 'My ceiling fan is slow and hums but does not spin fully.', appliance: 'ceiling_fan' },
+  { key: 'sug.wm', prompt: 'My washing machine is making a loud noise during spinning.', appliance: 'washing_machine' },
+  { key: 'sug.part', prompt: 'Help me identify this component.', appliance: 'mcb_electrical' },
 ]
 
 /** The appliance categories the backend and knowledge base support. */

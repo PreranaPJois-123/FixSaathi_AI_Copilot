@@ -28,6 +28,34 @@ ACTION_WORDS = re.compile(
     r'probe\w*|measur\w*|multimeter|continuity|megger|short(ing)? (the|across|out)|bridg(e|ing) the|bypass\w*|jumper\w*|'
     r'khol\w*|nikal\w*|nikaal\w*|badal\w*|jod\w*|chhu\w*|chhoo\w*)\b', re.I)
 
+# Steps in a chat reply. Live internal parts: a step that reaches, reads or handles them needs isolation however it is phrased
+# ("Note the microfarad rating printed on the capacitor" means the canopy is already open). The verbs of POWER_WORDS are in
+# ACTION_WORDS. External parts (motor, pump, compressor, valve, cover, panel) lock unless the step only observes them, so
+# "Note the error code on the display panel" or "Listen for the compressor clicking" stays readable.
+_LIVE = (r'canopy|wire(s|d)?|wiring|terminal(s)?|capacitor(s)?|connector(s)?|(control |main |power |circuit )?board(s)?|pcb(s)?|'
+         r'element(s)?|thermistor(s)?|relay(s)?|ptc|olp|overload (protector|relay)|starter( relay)?|winding(s)?|taar')
+LIVE_PARTS = re.compile(rf'\b({_LIVE}|removal|multimeter|continuity|live (wire|terminal|circuit|side))\b', re.I)
+SOFT_PARTS = re.compile(r'\b(cover(s)?|panel(s)?|motor(s)?|pump(s)?|valve(s)?|compressor(s)?)\b', re.I)
+# A step that only watches or listens. Anything else done to an external part (tighten, clean, shake, pull...) is hands-on.
+OBSERVE_ONLY = re.compile(r'^\W*(listen|hear|note|notice|watch|observe|wait|record|count|see|look (at|for)|read)\b(?!.*\b(inside|behind)\b)', re.I)
+# Free text: checking, testing or handling a live internal part is work on it ("Check the capacitor terminals for burn marks",
+# "Unplug the PTC starter from the compressor"). Same sentence only.
+HANDS_ON_LIVE = re.compile(
+    r'\b(check(s|ing)?|test(s|ing)?|inspect(s|ing)?|examin(e|es|ing)|clean(s|ing)?|tighten(s|ing)?|feel(s|ing)?|look(ing)? (at|for)|'
+    r'unplug(s|ging)?|pull(s|ing)?|shak(e|es|ing)|tap(s|ping)?|fit(s|ting)?|install(s|ing)?|swap(s|ping)?)'
+    rf'(?:[^\w.!?]+\w+){{0,4}}?[^\w.!?]+(?=({_LIVE})\b)', re.I)
+# A list item that opens with one of these names a suspected fault ("Faulty PTC relay", "Weak capacitor"), not a step to perform.
+FAULT_LEAD = re.compile(
+    r'^(\W*)(faulty|weak|failed|failing|worn|burnt|burned|damaged|defective|bad|blown|stuck|jammed|clogged|blocked|loose|low|dead|'
+    r'leaking|leaky|broken|tripped|dirty|shorted|cracked|seized|swollen|bulging|degraded|overheating|tight|dry|corroded|'
+    r'insufficient|incorrect|wrong|possible|likely|probable|suspected)\b', re.I)
+# A clause that opens with one of these is an instruction, even inside a list of causes ("- Unplug the PTC and shake it").
+IMPERATIVE = re.compile(
+    r'^\W*(unplug|plug|check|test|measure|remove|open|inspect|look|listen|note|spin|clean|replace|disconnect|try|turn|switch|'
+    r'verify|use|take|pull|push|shake|feel|tighten|ensure|make|set|reset|press|fit|install|swap|tap|hold|lift|lower|access|'
+    r'bridge|short|apply|connect|reconnect|discharge|probe|examine|confirm|compare|read|clear|move|adjust|lubricate|oil|grease|'
+    r'unscrew|screw|loosen|cut|strip|solder|bypass|jumper|insert|attach|detach|clip|unclip|mount|unmount|start|run|power)\b', re.I)
+
 # A verb within a few words after one of these is a prohibition ("never open", "do not touch the terminals", "mat kholna").
 NEGATION = re.compile(r"\b(not|never|don'?t|do not|avoid|without|mat|na|nahi|nahin|kabhi)\b(\W+\w+){0,3}\W*$", re.I)
 # A verb used as a precondition is the safety reminder itself, not the work: "before opening the canopy, switch off the MCB",
@@ -58,18 +86,17 @@ def instructs_power_work(text: str) -> bool:
     """Free text: True if it tells someone to do power-sensitive work. Prohibitions ('never open the cover') and
     preconditions ('before opening it, switch off the MCB') do not count; the work itself does."""
     t = text or ''
-    return any(_is_instruction(t, m) for m in ACTION_WORDS.finditer(t))
+    return any(_is_instruction(t, m) for rx in (ACTION_WORDS, HANDS_ON_LIVE) for m in rx.finditer(t))
 
 
 def step_text_needs_power_off(text: str) -> bool:
-    """A numbered or bulleted line in a reply is a step, so it gets the broad step rule (any mention of covers, canopy,
-    capacitors, terminals...). Only explicit prohibitions ('never open the cabinet') are let through."""
+    """A numbered or bulleted step in a reply: locked if it does power-sensitive work, reaches a live internal part, or does
+    anything other than observe an external part (motor, compressor, panel...). Only explicit prohibitions pass."""
     t = text or ''
-    for rx in (POWER_WORDS, ACTION_WORDS):
-        for m in rx.finditer(t):
-            if not NEGATION.search(t[max(0, m.start() - 40):m.start()]):
-                return True
-    return False
+
+    def hit(rx: re.Pattern) -> bool:
+        return any(not NEGATION.search(t[max(0, m.start() - 40):m.start()]) for m in rx.finditer(t))
+    return hit(ACTION_WORDS) or hit(LIVE_PARTS) or hit(HANDS_ON_LIVE) or (hit(SOFT_PARTS) and not OBSERVE_ONLY.match(t))
 
 
 def mentions_microwave_internals(text: str) -> bool:

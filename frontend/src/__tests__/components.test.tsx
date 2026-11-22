@@ -8,12 +8,13 @@ import { Composer } from '../components/composer/Composer'
 import { CameraModal } from '../components/camera/CameraModal'
 import { AuthProvider } from '../context/AuthContext'
 import { AppProvider, useApp } from '../context/AppContext'
+import { PrefsProvider } from '../context/PrefsContext'
 import * as services from '../services'
 import { fileService } from '../services'
 import { openFile } from '../utils/openFile'
 import type { Attachment } from '../types'
 
-const wrap = (ui: ReactNode) => render(<AuthProvider><AppProvider><MemoryRouter>{ui}</MemoryRouter></AppProvider></AuthProvider>)
+const wrap = (ui: ReactNode) => render(<AuthProvider><PrefsProvider><AppProvider><MemoryRouter>{ui}</MemoryRouter></AppProvider></PrefsProvider></AuthProvider>)
 const file = (name: string, type: string, size = 10) => new File([new Uint8Array(size)], name, { type })
 
 // ---------------- password visibility ----------------

@@ -48,6 +48,8 @@ class RepairSession(IdMixin, CreatedMixin, Base):
     resolution_notes: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set when the technician deletes the conversation from their chat history. The session, its report and safety log are kept.
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     technician = relationship('User', lazy='joined')
     __table_args__ = (CheckConstraint("status in ('created','active','diagnosing','awaiting_confirmation','guidance_in_progress','escalated','completed','cancelled')", name='status_valid'),
                       Index('ix_sessions_tech_created', 'technician_id', 'created_at'))

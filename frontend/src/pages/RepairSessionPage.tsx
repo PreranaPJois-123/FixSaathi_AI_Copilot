@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Camera, Check, ChevronLeft, Circle, FileText, HandHelping, ImagePlus, Loader2, Lock, MessageSquare, Mic, ScanSearch, Sparkles, Stethoscope, Wand2 } from 'lucide-react'
+import { Camera, Check, ChevronLeft, Circle, Download, FileText, HandHelping, ImagePlus, Loader2, Lock, MessageSquare, ScanSearch, Sparkles, Stethoscope, Wand2 } from 'lucide-react'
 import { CameraModal } from '../components/camera/CameraModal'
 import { SafetyPanel } from '../components/repair/SafetyPanel'
 import { AuthImage } from '../components/common/AuthImage'
@@ -11,7 +11,6 @@ import { DocChip } from '../components/composer/Composer'
 import { openFile } from '../utils/openFile'
 import type { ApiError } from '../services/api'
 import { useAuth } from '../context/AuthContext'
-import { useApp } from '../context/AppContext'
 import type { Attachment, ComponentResult, Diagnosis, MediaItem, RepairSession, RepairStep, SafetyState, SimilarResult } from '../types'
 
 const CLOSED = ['completed', 'cancelled']
@@ -22,7 +21,6 @@ const ico = 'flex h-8 w-8 items-center justify-center rounded-xl bg-surface-3 te
 export default function RepairSessionPage() {
   const { id = '' } = useParams()
   const { user } = useAuth()
-  const { openSession } = useApp()
   const nav = useNavigate()
   const [s, setS] = useState<RepairSession | null>(null)
   const [loadErr, setLoadErr] = useState<string | null>(null)
@@ -99,7 +97,7 @@ export default function RepairSessionPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8">
-      <Link to="/history" className="mb-5 inline-flex items-center gap-1 text-sm text-ink-2 transition-colors hover:text-ink"><ChevronLeft size={16} />Repair history</Link>
+      <Link to={`/chat/${id}`} className="mb-5 inline-flex items-center gap-1 text-sm text-ink-2 transition-colors hover:text-ink"><ChevronLeft size={16} />Back to chat</Link>
       {s.demo && <div role="note" className="mb-4 rounded-2xl border border-warn/50 bg-warn/10 px-4 py-3 text-sm text-warn"><b>Demo scenario.</b> Diagnosis, steps and replies here are scripted sample content, not live AI. The safety lock, logging and report are the real server code.</div>}
       <header className="card card-pad mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
@@ -108,8 +106,8 @@ export default function RepairSessionPage() {
           <div className="mt-2 flex flex-wrap items-center gap-2"><StatusPill status={s.status} />{s.technician_name && !owner && <span className="text-xs text-ink-2">Technician: {s.technician_name}</span>}</div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className={btn} onClick={() => { void openSession(id); nav(`/assistant?session=${id}`) }}><MessageSquare size={16} />Chat</button>
-          {owner && open && <button className={btn} onClick={() => nav(`/voice?session=${id}`)}><Mic size={16} className="text-teal" />Voice</button>}
+          <button className={btn} onClick={() => nav(`/chat/${id}`)}><MessageSquare size={16} />Chat</button>
+          <button className={btn} disabled={busy === 'pdf'} onClick={() => run('pdf', () => sessionService.downloadPdf(id, s.reference))}>{busy === 'pdf' ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}PDF</button>
           {owner && open && s.status !== 'escalated' && <button onClick={() => setShowEsc(v => !v)} className="btn btn-warn"><HandHelping size={16} />Ask a senior technician</button>}
           {s.report_id && <Link to={`/reports/${s.report_id}`} className={btn}><FileText size={16} />Report</Link>}
         </div>
@@ -118,7 +116,7 @@ export default function RepairSessionPage() {
         <div className="mb-6 flex flex-col gap-2 rounded-2xl border border-warn/30 bg-warn/5 p-4 sm:flex-row">
           <label className="sr-only" htmlFor="esc">Reason</label>
           <input id="esc" value={escReason} onChange={e => setEscReason(e.target.value)} placeholder="Why do you need a senior? e.g. burnt smell in canopy" className="field flex-1 !py-2.5 text-sm" />
-          <button disabled={escReason.trim().length < 3 || busy === 'esc'} onClick={escalate} className="btn !border-0 !bg-warn font-semibold !text-[#1a1202]">Send request</button>
+          <button disabled={escReason.trim().length < 3 || busy === 'esc'} onClick={escalate} className="btn !border-0 !bg-warn font-semibold !text-white">Send request</button>
         </div>
       )}
       {msg && <p role={msg.kind === 'error' ? 'alert' : 'status'} className={`mb-6 rounded-2xl border px-4 py-3 text-sm ${msg.kind === 'error' ? 'border-crit/40 bg-crit/10 text-crit' : 'border-teal/40 bg-teal/10 text-ink'}`}>{msg.text}</p>}
@@ -237,7 +235,7 @@ export default function RepairSessionPage() {
               <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Outcome">
                 {([['resolved', 'Fixed'], ['not_resolved', 'Not fixed'], ['escalated', 'Escalated']] as const).map(([v, l]) => <button key={v} role="radio" aria-checked={outcome === v} onClick={() => setOutcome(v)} className={`rounded-xl border px-4 py-1.5 text-sm font-medium transition-colors ${outcome === v ? 'border-teal/70 bg-teal/12 text-ink' : 'border-line-2 text-ink-2 hover:text-ink'}`}>{l}</button>)}
               </div>
-              {outcome === 'resolved' && <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#2fc4b0]" checked={ftf === true} onChange={e => setFtf(e.target.checked)} />Fixed on this first visit</label>}
+              {outcome === 'resolved' && <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[var(--color-accent)]" checked={ftf === true} onChange={e => setFtf(e.target.checked)} />Fixed on this first visit</label>}
               <div className="mt-3 flex items-center gap-1" role="radiogroup" aria-label="Rate the guidance">
                 <span className="mr-2 text-sm text-ink-2">Rate the guidance</span>
                 {[1, 2, 3, 4, 5].map(n => <button key={n} role="radio" aria-checked={rating === n} aria-label={`${n} stars`} onClick={() => setRating(n)} className={`h-8 w-8 rounded-full text-sm ${rating >= n ? 'fs-amber-bg text-bg' : 'border border-line text-ink-3'}`}>{n}</button>)}

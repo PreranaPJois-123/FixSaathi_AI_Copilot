@@ -25,7 +25,20 @@ export const sessionService = {
   create: (issue_description: string, appliance_type?: string) => api<RepairSession>('/api/v1/sessions', { body: { issue_description, appliance_type: appliance_type || null } }),
   get: (id: string) => api<RepairSession>(`/api/v1/sessions/${id}`),
   list: (limit = 20, status?: string) => api<Page<RepairSession>>(`/api/v1/sessions?limit=${limit}${status ? `&status=${status}` : ''}`),
+  /** The technician's own chat history (newest first), optionally filtered by a search over titles and message text. */
+  mine: (q = '', limit = 100) => api<Page<RepairSession>>(`/api/v1/sessions?mine=true&limit=${limit}${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ''}`),
+  rename: (id: string, title: string) => api<RepairSession>(`/api/v1/sessions/${id}`, { method: 'PATCH', body: { title } }),
+  /** Removes the chat from the history. Reports and safety records are kept on the server. */
+  remove: (id: string) => api<null>(`/api/v1/sessions/${id}`, { method: 'DELETE' }),
   cancel: (id: string) => api<RepairSession>(`/api/v1/sessions/${id}/cancel`, { method: 'POST' }),
+  /** Downloads the repair report PDF for a conversation, built on the server from its recorded data. */
+  async downloadPdf(id: string, reference?: string) {
+    const r = await api<Response>(`/api/v1/sessions/${id}/report.pdf`, { raw: true, timeoutMs: 60000 })
+    const url = URL.createObjectURL(await r.blob())
+    const a = document.createElement('a'); a.href = url; a.download = `FixSaathi-${reference || id.slice(0, 8)}-repair-report.pdf`; a.rel = 'noopener'
+    document.body.appendChild(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  },
 }
 
 export interface DemoScenario { id: string; title: string; appliance: string; issue: string; has_photo: boolean }

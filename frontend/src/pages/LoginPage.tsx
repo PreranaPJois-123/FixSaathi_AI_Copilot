@@ -37,10 +37,8 @@ export default function LoginPage() {
   }
   const label = 'mb-1.5 block text-xs font-medium text-ink-2'
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]" style={{ background: 'var(--fs-stage)' }}>
-      <aside className="relative hidden overflow-hidden border-r border-line lg:flex lg:flex-col lg:justify-between lg:p-12">
-        <div className="bg-grid pointer-events-none absolute inset-0" aria-hidden />
-        <div className="pointer-events-none absolute -left-24 top-1/3 h-80 w-80 rounded-full bg-teal/10 blur-3xl" aria-hidden />
+    <div className="grid min-h-dvh bg-bg lg:grid-cols-[1.05fr_1fr]">
+      <aside className="relative hidden overflow-hidden border-r border-line bg-bg-2 lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div className="relative flex items-center gap-3"><Emblem height={44} /><Wordmark height={20} /></div>
         <div className="relative max-w-lg">
           <p className="section-label mb-4 text-teal">AI repair copilot for field technicians</p>

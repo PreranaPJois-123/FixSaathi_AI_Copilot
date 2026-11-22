@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { AlertTriangle, Check, Copy, PlayCircle, Sparkles } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { AlertTriangle, Check, Copy, Download, FileText, Loader2, Volume2 } from 'lucide-react'
 import { Emblem } from '../common/Logo'
 import { useApp } from '../../context/AppContext'
+import { usePrefs } from '../../context/PrefsContext'
 import type { ChatMessage } from '../../types'
 import { SourceList } from '../common/SourceList'
 import { AuthImage } from '../common/AuthImage'
@@ -11,20 +11,55 @@ import { Markdown } from './Markdown'
 import { DocChip } from '../composer/Composer'
 import { openFile } from '../../utils/openFile'
 import { speakable } from '../../utils/text'
+import { sessionService } from '../../services'
+import { speech, speechSupported } from '../../services/speech'
+import { useLanguage, useT } from '../../i18n'
 
 const time = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+const tool = 'inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink'
 
 function Avatar() {
-  return <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-line bg-gradient-to-b from-surface-2 to-surface shadow-[0_8px_20px_-12px_rgba(45,212,191,.6)]"><Emblem height={22} /></div>
+  return <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface"><Emblem height={18} /></div>
 }
 
 function CopyButton({ text }: { text: string }) {
+  const t = useT()
   const [ok, setOk] = useState(false)
   const copy = async () => { try { await navigator.clipboard.writeText(speakable(text)); setOk(true); setTimeout(() => setOk(false), 1500) } catch { /* clipboard blocked */ } }
-  return <button onClick={copy} aria-label="Copy answer" title="Copy answer" className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink">{ok ? <Check size={12} className="text-ok" /> : <Copy size={12} />}{ok ? 'Copied' : 'Copy'}</button>
+  return <button onClick={copy} aria-label={t('chat.copy')} title={t('chat.copy')} className={tool}>{ok ? <Check size={13} className="text-ok" /> : <Copy size={13} />}<span className="sr-only sm:not-sr-only">{ok ? t('chat.copied') : t('chat.copy')}</span></button>
+}
+
+function ReadAloud({ text, id }: { text: string; id: string }) {
+  const t = useT()
+  const language = useLanguage()
+  const { sessionId } = useApp()
+  const { voiceURI, rate, aiVoice } = usePrefs()
+  if (!speechSupported()) return null
+  return <button onClick={() => speech.speak(text, { language, voiceURI, rate, aiVoice, source: sessionId ? { sessionId, messageId: id } : null })} aria-label={t('chat.readAloud')} title={t('chat.readAloud')} className={tool}><Volume2 size={13} /><span className="sr-only sm:not-sr-only">{t('chat.readAloud')}</span></button>
+}
+
+/** The download card under a "report ready" reply. The PDF is built on the server from this conversation's recorded data. */
+function PdfCard() {
+  const t = useT()
+  const { sessionId, session } = useApp()
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const get = async () => {
+    if (!sessionId) return
+    setBusy(true); setErr(null)
+    try { await sessionService.downloadPdf(sessionId, session?.reference) } catch (e) { setErr((e as Error).message || 'Could not create the PDF.') } finally { setBusy(false) }
+  }
+  return (
+    <div className="mt-3 flex max-w-md items-center gap-3 rounded-2xl border border-line bg-surface p-3">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-crit/10 text-crit"><FileText size={20} /></span>
+      <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{t('chat.pdfTitle')}</span><span className="block truncate text-xs text-ink-3">{err ?? t('chat.pdfSub')}</span></span>
+      <button onClick={() => void get()} disabled={busy || !sessionId} className="btn btn-primary btn-sm">{busy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}{busy ? t('chat.preparing') : t('chat.downloadPdf')}</button>
+    </div>
+  )
 }
 
 function Bubble({ m }: { m: ChatMessage }) {
+  const t = useT()
   if (m.role === 'system') {
     return (
       <div role="status" className="mx-auto flex max-w-xl items-start gap-3 rounded-2xl border border-warn/35 bg-warn/[0.07] px-4 py-3.5 text-sm text-warn">
@@ -32,7 +67,6 @@ function Bubble({ m }: { m: ChatMessage }) {
         <span>
           {m.notice === 'ai_unavailable' ? `AI is not available: ${m.text}` : `The AI could not reply: ${m.text}`} Your message was saved.
           {m.hint && <span className="mt-1.5 block text-xs text-ink-2">Fix: {m.hint}{m.errorCode ? ` (${m.errorCode})` : ''}</span>}
-          <Link to="/demo" className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-teal hover:underline"><PlayCircle size={13} />Show the product with a labelled demo scenario instead</Link>
         </span>
       </div>
     )
@@ -42,44 +76,48 @@ function Bubble({ m }: { m: ChatMessage }) {
     <div className={`mb-2 flex flex-wrap gap-2 ${mine ? 'justify-end' : ''}`}>{m.attachments.map(a => a.kind === 'document'
       ? <DocChip key={a.id} name={a.name || 'Document'} size={a.size} onOpen={() => void openFile(a).catch(() => undefined)} />
       : a.server
-        ? <AuthImage key={a.id} src={a.url} alt="Attached appliance" className="h-32 w-32 overflow-hidden rounded-2xl border border-line shadow-lg" />
-        : <img key={a.id} src={a.url} alt="Attached appliance" className="h-32 w-32 rounded-2xl border border-line object-cover shadow-lg" />)}</div>
+        ? <AuthImage key={a.id} src={a.url} alt="Attached appliance" className="h-32 w-32 overflow-hidden rounded-2xl border border-line" />
+        : <img key={a.id} src={a.url} alt="Attached appliance" className="h-32 w-32 rounded-2xl border border-line object-cover" />)}</div>
   )
   if (mine) {
     return (
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }} className="flex justify-end">
-        <div className="flex max-w-[85%] flex-col items-end sm:max-w-[72%]">
+      <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }} className="flex justify-end">
+        <div className="flex max-w-[85%] flex-col items-end sm:max-w-[75%]">
           {photos}
-          {m.text && <div className="whitespace-pre-wrap rounded-[22px] rounded-br-md border border-line-2 bg-gradient-to-b from-surface-3 to-surface-2 px-4 py-2.5 text-[15px] leading-relaxed text-ink shadow-[0_10px_30px_-18px_rgba(0,0,0,.8)]">{m.text}</div>}
+          {m.text && <div className="whitespace-pre-wrap rounded-[20px] rounded-br-md bg-surface-2 px-4 py-2.5 text-[15px] leading-relaxed text-ink">{m.text}</div>}
           <span className="mt-1 px-1 text-[11px] text-ink-3">{time(m.at)}</span>
         </div>
       </motion.div>
     )
   }
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="flex gap-3">
+    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="flex gap-3">
       <Avatar />
-      <div className="min-w-0 flex-1">
-        <div className="mb-1 flex items-center gap-2 text-xs"><span className="font-semibold text-ink">FixSaathi</span><span className="text-ink-3">{time(m.at)}</span>
-          {m.demo && <span className="rounded-full border border-warn/50 bg-warn/10 px-2 py-px font-medium text-warn">Demo scenario: scripted sample, not live AI</span>}</div>
+      <div className="min-w-0 flex-1 pt-0.5">
+        {m.demo && <span className="mb-1.5 inline-block rounded-full border border-warn/50 bg-warn/10 px-2 py-px text-[11px] font-medium text-warn">Demo scenario: scripted sample, not live AI</span>}
         {photos}
         {m.text && <Markdown text={m.text} sources={m.sources} />}
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-ink-3">
-          {m.aiGenerated && <span className="inline-flex items-center gap-1"><Sparkles size={11} className="text-teal" />AI-generated, check before acting</span>}
-          {m.text && <CopyButton text={m.text} />}
-        </div>
+        {m.action === 'pdf_report' && <PdfCard />}
         {m.sources && m.sources.length > 0 && <SourceList sources={m.sources} />}
+        <div className="mt-1.5 flex flex-wrap items-center gap-0.5 text-[11.5px] text-ink-3">
+          {m.text && m.action !== 'pdf_report' && <ReadAloud text={m.text} id={m.id} />}
+          {m.text && <CopyButton text={m.text} />}
+          <span className="ml-1.5">{time(m.at)}</span>
+          {m.aiGenerated && <span className="ml-2 hidden sm:inline">· {t('chat.aiGenerated')}</span>}
+        </div>
       </div>
     </motion.div>
   )
 }
 
 function ThinkingLabel({ progress }: { progress: string | null }) {
-  const [t, setT] = useState(0)
-  useEffect(() => { const id = setInterval(() => setT(x => x + 1), 1000); return () => clearInterval(id) }, [])
+  const t = useT()
+  const [s, setS] = useState(0)
+  useEffect(() => { const id = setInterval(() => setS(x => x + 1), 1000); return () => clearInterval(id) }, [])
   if (progress) return <span className="text-sm"><span className="text-shimmer font-medium">{progress}...</span></span>
-  const phase = t < 3 ? 'Reading your message' : t < 8 ? 'Checking the repair knowledge base' : t < 20 ? 'Gemini is working on the answer' : 'Still working, Gemini is busy'
-  return <span className="text-sm tabular-nums"><span className="text-shimmer font-medium">{phase}...</span> <span className="text-ink-3">{t}s</span></span>
+  // Retrieval takes milliseconds; nearly all of the wait is the AI model. After ~12 s the server also asks the backup model.
+  const phase = s < 2 ? t('think.check') : s < 12 ? t('think.write') : t('think.slow')
+  return <span className="text-sm tabular-nums"><span className="text-shimmer font-medium">{phase}…</span> <span className="text-ink-3">{s}s</span></span>
 }
 
 export function ChatThread() {
@@ -87,14 +125,17 @@ export function ChatThread() {
   const end = useRef<HTMLDivElement>(null)
   useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [messages.length, thinking])
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-7 px-4 py-8 md:px-6" role="log" aria-live="polite" aria-label="Conversation">
+    <div className="mx-auto w-full max-w-3xl space-y-6 px-4 pb-4 pt-6 md:px-6" role="log" aria-live="polite" aria-label="Conversation">
       {messages.map(m => <Bubble key={m.id} m={m} />)}
       {thinking && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3" aria-label="FixSaathi is thinking">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3" aria-label="FixSaathi is thinking">
           <Avatar />
-          <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface/60 px-4 py-2.5">
-            <span className="flex items-center gap-1">{[0, 1, 2].map(i => <span key={i} className="typing-dot h-1.5 w-1.5 rounded-full bg-teal" style={{ animationDelay: `${i * 0.15}s` }} />)}</span>
-            <ThinkingLabel progress={progress} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-3 py-1.5">
+              <span className="flex items-center gap-1">{[0, 1, 2].map(i => <span key={i} className="typing-dot h-1.5 w-1.5 rounded-full bg-accent" style={{ animationDelay: `${i * 0.15}s` }} />)}</span>
+              <ThinkingLabel progress={progress} />
+            </div>
+            <div className="mt-2 space-y-2.5" aria-hidden><div className="skeleton h-3.5 w-11/12" /><div className="skeleton h-3.5 w-4/5" /><div className="skeleton h-3.5 w-3/5" /></div>
           </div>
         </motion.div>
       )}

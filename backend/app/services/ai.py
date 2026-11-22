@@ -171,7 +171,8 @@ async def chat_reply(db: Session, s: RepairSession, user: User, text: str, media
     sc = safety.screen_text(db, s, user, reply, actor='chat', voice=channel == 'voice')
     reply = sc.text
     sources = [h.citation() for h in res['hits'] if h.record_id in used]
-    return add_message(db, s, 'assistant', reply, meta={'model': meta.model, 'latency_ms': meta.latency_ms, 'ai_generated': meta.model != 'demo-scenario', 'demo': meta.model == 'demo-scenario', 'sources': sources,
+    # 'channel' is how the technician asked (typed or spoken). The app reads a reply aloud by itself only when it answers a voice message.
+    return add_message(db, s, 'assistant', reply, meta={'channel': channel, 'model': meta.model, 'latency_ms': meta.latency_ms, 'ai_generated': meta.model != 'demo-scenario', 'demo': meta.model == 'demo-scenario', 'sources': sources,
                                                          'knowledge_coverage': res['coverage'], 'removed_invalid_citations': len(invented),
                                                          'safety_withheld': sc.withheld, 'safety_reason': sc.reason, 'microwave_escalated': sc.microwave_escalated})
 

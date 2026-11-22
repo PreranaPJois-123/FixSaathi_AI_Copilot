@@ -1,9 +1,10 @@
-import uuid
+import re, uuid
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import Response
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session
 from ...core.exceptions import AppError, NotFound
+from ...db.base import utcnow
 from ...db.models import Conversation, Media, RepairSession, User
 from ...db.session import get_db
 from ...dependencies import current_user
@@ -11,10 +12,25 @@ from ...integrations.storage.local import get_storage
 from ...schemas.repair import ChatResult, MediaOut, MessageIn, MessageOut, Page, SessionCreate, SessionOut, SessionPatch
 from ...services import ai
 from ...services.access import get_owned_session, get_readable_session, session_scope
-from ...services.sessions import add_message, create_session, ensure_open, transition
+from ...services.sessions import TERMINAL, add_message, chat_title, create_session, ensure_open, transition
 from .serializers import media_out, session_out
 
 router = APIRouter(tags=['sessions'])
+
+_PDF_ASK = r'(?:generate|create|make|prepare|export|download|give|send|share|want|need|get)'
+_PDF_INTENT = [re.compile(r'\bpdf\b.{0,40}\b(?:banao|bana do|banado|chahiye|do)\b', re.I),
+               re.compile(rf'\b{_PDF_ASK}\b.{{0,50}}\bpdf\b', re.I),
+               re.compile(r'\b(?:generate|create|make|prepare)\b.{0,40}\breport\b', re.I),
+               re.compile(r'\b(?:download|export|save|print)\b.{0,40}\b(?:report|diagnosis|summary|instructions|steps|this|chat|conversation)\b', re.I),
+               re.compile(r'\b(?:report|summary)\b.{0,20}\b(?:banao|bana do|banado|chahiye)\b', re.I)]
+PDF_REPLY = ('Your repair report for this conversation is ready. It is built only from what is recorded in this session: the reported problem, '
+             'diagnosis, repair steps, safety statements and escalations. Use **Download PDF** below.')
+
+
+def wants_pdf(text: str) -> bool:
+    """True when the technician asks for a report or PDF of this conversation, e.g. 'Generate a repair report PDF' or 'Download this diagnosis'."""
+    t = ' '.join(text.split())
+    return 0 < len(t) <= 200 and any(p.search(t) for p in _PDF_INTENT)
 
 
 @router.post('/sessions', response_model=SessionOut, status_code=201)
@@ -24,14 +40,23 @@ def create(body: SessionCreate, u: User = Depends(current_user), db: Session = D
 
 @router.get('/sessions', response_model=Page)
 def list_sessions(status: str | None = None, appliance_type: str | None = None, limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0),
+                  q: str | None = Query(None, max_length=120, description='Search titles, issue text and messages'),
+                  mine: bool = Query(False, description="Only the caller's own conversations (chat history), not the team's"),
                   u: User = Depends(current_user), db: Session = Depends(get_db, scope="function")):
-    q = session_scope(u)
+    """Conversations the technician deleted from their chat history are not listed; the records themselves are kept."""
+    query = session_scope(u).where(RepairSession.hidden_at.is_(None))
+    if mine:
+        query = query.where(RepairSession.technician_id == u.id)
+    if q and q.strip():
+        like = '%' + re.sub(r'([%_\\])', r'\\\1', q.strip()) + '%'
+        in_messages = exists().where(Conversation.session_id == RepairSession.id, Conversation.message.ilike(like, escape='\\'))
+        query = query.where(or_(RepairSession.title.ilike(like, escape='\\'), RepairSession.issue_description.ilike(like, escape='\\'), in_messages))
     if status:
-        q = q.where(RepairSession.status.in_(status.split(',')))
+        query = query.where(RepairSession.status.in_(status.split(',')))
     if appliance_type:
-        q = q.where(RepairSession.appliance_type == appliance_type)
-    total = db.scalar(select(func.count()).select_from(q.subquery()))
-    rows = db.scalars(q.order_by(RepairSession.created_at.desc()).limit(limit).offset(offset)).unique().all()
+        query = query.where(RepairSession.appliance_type == appliance_type)
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+    rows = db.scalars(query.order_by(RepairSession.created_at.desc()).limit(limit).offset(offset)).unique().all()
     return Page(items=[session_out(db, s) for s in rows], total=total or 0, limit=limit, offset=offset)
 
 
@@ -42,14 +67,42 @@ def get_session(session_id: uuid.UUID, u: User = Depends(current_user), db: Sess
 
 @router.patch('/sessions/{session_id}', response_model=SessionOut)
 def patch_session(session_id: uuid.UUID, body: SessionPatch, u: User = Depends(current_user), db: Session = Depends(get_db, scope="function")):
-    s = get_owned_session(db, u, session_id, lock=True); ensure_open(s)
+    s = get_owned_session(db, u, session_id, lock=True)
     data = body.model_dump(exclude_none=True)
+    if set(data) != {'title'}:  # renaming a conversation is allowed after it is closed; nothing else is
+        ensure_open(s)
+    if 'title' in data:
+        data['title'] = ' '.join(data['title'].split()) or s.title
+        s.appliance_details = {**(s.appliance_details or {}), 'title_auto': False}
     if 'status' in data:
         transition(s, data.pop('status'))
     for k, v in data.items():
         setattr(s, k, v)
     db.flush()
     return session_out(db, s)
+
+
+@router.delete('/sessions/{session_id}', status_code=204)
+def delete_conversation(session_id: uuid.UUID, u: User = Depends(current_user), db: Session = Depends(get_db, scope="function")):
+    """Removes the conversation from the technician's chat history. Nothing is erased: service reports, the safety log and
+    manager analytics keep their records. An open session is cancelled so it does not stay 'active' forever."""
+    s = get_owned_session(db, u, session_id, lock=True)
+    if s.status not in TERMINAL:
+        transition(s, 'cancelled')
+    s.hidden_at = s.hidden_at or utcnow()
+    return Response(status_code=204)
+
+
+@router.get('/sessions/{session_id}/report.pdf')
+def report_pdf(session_id: uuid.UUID, u: User = Depends(current_user), db: Session = Depends(get_db, scope="function")):
+    """A PDF of what is recorded for this conversation. Power-sensitive step instructions stay hidden unless the safety statements are recorded."""
+    from urllib.parse import quote
+    from ...services.pdf_report import render_session_pdf
+    s = get_readable_session(db, u, session_id)
+    data = render_session_pdf(db, s, u)
+    name = f'FixSaathi-{s.reference}-repair-report.pdf'
+    return Response(data, media_type='application/pdf', headers={'Content-Disposition': f"attachment; filename*=UTF-8''{quote(name)}",
+                                                                 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
 
 
 @router.post('/sessions/{session_id}/cancel', response_model=SessionOut)
@@ -80,9 +133,15 @@ async def post_message(session_id: uuid.UUID, body: MessageIn, u: User = Depends
         files = [{'id': str(i), 'kind': 'document' if rows[i].kind == 'document' else 'image', 'mime': rows[i].mime_type, 'size': rows[i].size_bytes,
                   'name': (rows[i].meta or {}).get('filename'), 'pages': (rows[i].meta or {}).get('pages')} for i in dict.fromkeys(body.media_ids)]
     mtype = ('image' if all(f['kind'] == 'image' for f in files) else 'file') if files and not body.text.strip() else 'text'
-    um = add_message(db, s, 'user', body.text.strip(), mtype, {'media_ids': [str(i) for i in dict.fromkeys(body.media_ids)], 'attachments': files})
+    um = add_message(db, s, 'user', body.text.strip(), mtype, {'media_ids': [str(i) for i in dict.fromkeys(body.media_ids)], 'attachments': files, 'channel': body.channel})
     if not s.issue_description and body.text.strip():
         s.issue_description = body.text.strip()[:2000]
+        if (s.appliance_details or {}).get('title_auto'):  # e.g. a photo-only first message: name the chat after the first description
+            s.title = chat_title(s.issue_description, s.appliance_type)
+    if not body.media_ids and wants_pdf(body.text):
+        # Answered by the server, not Gemini: the PDF is built from recorded data, so there is nothing for the model to write.
+        am = add_message(db, s, 'assistant', PDF_REPLY, meta={'action': 'pdf_report', 'ai_generated': False, 'channel': body.channel})
+        return ChatResult(user_message=MessageOut.model_validate(um), assistant_message=MessageOut.model_validate(am), ai_status='ok')
     db.commit()  # persist the technician's message even if the AI call fails
     try:
         am = await ai.chat_reply(db, s, u, body.text.strip(), body.media_ids, exclude_id=um.id, channel=body.channel)
@@ -91,6 +150,21 @@ async def post_message(session_id: uuid.UUID, body: MessageIn, u: User = Depends
         db.commit()
         return ChatResult(user_message=MessageOut.model_validate(um), assistant_message=None, ai_status='unavailable' if e.status == 503 else 'error',
                           ai_error={'code': e.code, 'message': e.message, 'hint': e.details.get('hint'), 'provider_status': e.details.get('provider_status')})
+
+
+@router.get('/sessions/{session_id}/messages/{message_id}/speech')
+async def message_speech(session_id: uuid.UUID, message_id: uuid.UUID, voice: str | None = Query(None, max_length=32),
+                         u: User = Depends(current_user), db: Session = Depends(get_db, scope="function")):
+    """A stored assistant reply spoken with Gemini text-to-speech (WAV). Requested by the app only for replies to voice messages
+    while the speaker is on, or when the technician presses Read aloud. Errors carry a code so the app can fall back to the
+    browser's own voice (MODEL_NOT_CONFIGURED, QUOTA_EXCEEDED...)."""
+    from ...services import voice as voice_svc
+    s = get_readable_session(db, u, session_id)
+    m = db.scalar(select(Conversation).where(Conversation.id == message_id, Conversation.session_id == s.id, Conversation.role == 'assistant'))
+    if m is None:
+        raise NotFound('Message not found.')
+    data, v = await voice_svc.speak(m, voice)
+    return Response(data, media_type='audio/wav', headers={'Cache-Control': 'private, max-age=86400', 'X-Voice': v})
 
 
 async def _store_upload(db: Session, u: User, session_id: uuid.UUID, file: UploadFile, source: str, images_only: bool) -> MediaOut:

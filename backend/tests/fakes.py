@@ -12,10 +12,10 @@ class FakeGemini(gclient.GeminiClient):
     """Deterministic stand-in. Scripted outputs; no network."""
     def __init__(self):
         super().__init__(client=object())
-        self.json: dict = {}; self.text = 'Demo-free scripted reply'; self.fail: dict = {}; self.calls: list = []
+        self.json: dict = {}; self.text = 'Demo-free scripted reply'; self.fail: dict = {}; self.calls: list = []; self.systems: list = []
 
     def model(self, kind):
-        return {'agent': 'fake-agent', 'live': 'fake-live', 'embed': 'fake-embed', 'image': 'fake-image'}[kind]
+        return {'agent': 'fake-agent', 'live': 'fake-live', 'embed': 'fake-embed', 'image': 'fake-image', 'tts': 'fake-tts'}[kind]
 
     async def generate_json(self, op, schema, contents, system, temperature=0.2):
         self.calls.append((op, contents))
@@ -29,9 +29,14 @@ class FakeGemini(gclient.GeminiClient):
             raise AIError('The AI model returned a response that failed validation.', code='AI_INVALID_OUTPUT') from e
 
     async def generate_text(self, op, contents, system, temperature=0.4):
-        self.calls.append((op, contents))
+        self.calls.append((op, contents)); self.systems.append(system)
         if op in self.fail: raise self.fail[op]
         return self.text, gclient.CallResult(model='fake-agent', latency_ms=5)
+
+    async def speech(self, text, voice, direction=None):
+        self.calls.append(('tts', text, voice, direction))
+        if 'tts' in self.fail: raise self.fail['tts']
+        return b'\x00\x01' * 2400, gclient.CallResult(model='fake-tts', latency_ms=5)
 
     async def generate_image(self, prompt, reference=None):
         return png(), 'image/png', gclient.CallResult(model='fake-image', latency_ms=5)

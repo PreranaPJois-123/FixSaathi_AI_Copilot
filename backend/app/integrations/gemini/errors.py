@@ -4,6 +4,12 @@ import asyncio, re
 from dataclasses import dataclass
 import httpx
 from google.genai import errors
+try:  # google-genai 3.x sends requests through httpx2, whose exceptions do not subclass httpx's
+    import httpx2
+    _HTTPX2_TIMEOUT: tuple = (httpx2.TimeoutException,)
+    _HTTPX2_ERROR: tuple = (httpx2.HTTPError,)
+except ImportError:  # pragma: no cover - older SDKs use httpx only
+    _HTTPX2_TIMEOUT = _HTTPX2_ERROR = ()
 
 # Classic Google API keys (AIza...), newer bound keys (AQ....) and key= query parameters.
 KEYLIKE = re.compile(r'AIza[0-9A-Za-z_\-]{20,}|AQ\.[0-9A-Za-z_\-.]{20,}|key=[^&\s]+')
@@ -92,9 +98,9 @@ def classify(e: BaseException, model: str | None = None) -> Classified:
             return Classified('PERMISSION_DENIED', 503, 'The Gemini API key is not allowed to open Live sessions.', 'Check the key\'s Live API access.', False, **base)
         if ws_status == 429:
             return Classified('QUOTA_EXCEEDED', 503, 'Gemini is rate-limiting this API key right now. Please try again in a few seconds.', 'Live API quota reached.', True, **base)
-    if isinstance(e, (asyncio.TimeoutError, httpx.TimeoutException)):
+    if isinstance(e, (asyncio.TimeoutError, httpx.TimeoutException, *_HTTPX2_TIMEOUT)):
         return Classified('AI_TIMEOUT', 504, 'The AI model took too long to respond.', 'Retry; if it persists raise GEMINI_TIMEOUT_SECONDS.', True)
-    if isinstance(e, httpx.HTTPError) or isinstance(e, OSError):
+    if isinstance(e, (httpx.HTTPError, OSError, *_HTTPX2_ERROR)):
         return Classified('NETWORK_ERROR', 503, 'The server cannot reach Google\'s AI service.', 'Check the backend machine\'s internet, proxy or firewall (generativelanguage.googleapis.com:443).', True,
                           provider_message=type(e).__name__)
     return Classified('AI_INTERNAL_ERROR', 500, 'Something went wrong while calling the AI.', f'Unexpected {type(e).__name__}; see backend logs.', False,

@@ -209,7 +209,7 @@ def test_missing_knowledge_handled(client, tech, fake):
 
 
 def test_chat_strips_invented_citations(client, tech, session_id, fake):
-    fake.text = 'Check the capacitor [fixsaathi:fan_slow_hum] and see [lg:fake-123] too.'
+    fake.text = 'A weak capacitor is the likely cause [fixsaathi:fan_slow_hum], see [lg:fake-123] too.'
     r = client.post(f'/api/v1/sessions/{session_id}/messages', json={'text': 'fan slow and humming'}, headers=tech['h']).json()
     m = r['assistant_message']
     assert '[fixsaathi:fan_slow_hum]' in m['message'] and 'lg:fake-123' not in m['message']

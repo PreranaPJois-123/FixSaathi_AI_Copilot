@@ -110,7 +110,7 @@ export function CameraModal({ open, onClose, onUse }: Props) {
             <div className="flex flex-wrap items-center justify-center gap-3 p-5">
               <input ref={galleryInput} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={e => { onFile(e.target.files?.[0], 'upload'); e.currentTarget.value = '' }} data-testid="camera-gallery" />
               <input ref={nativeInput} type="file" accept="image/*" capture="environment" hidden onChange={e => { onFile(e.target.files?.[0], 'camera'); e.currentTarget.value = '' }} data-testid="camera-native" />
-              {phase === 'live' && <button onClick={capture} aria-label="Capture photo" className="fs-amber-bg flex h-16 w-16 items-center justify-center rounded-full text-[#1a0e02] shadow-[0_10px_30px_-10px_rgba(255,138,43,.9)] ring-4 ring-white/10 transition-transform active:scale-95"><Camera /></button>}
+              {phase === 'live' && <button onClick={capture} aria-label="Capture photo" className="fs-amber-bg flex h-16 w-16 items-center justify-center rounded-full text-white shadow-[0_10px_30px_-10px_rgba(255,138,43,.9)] ring-4 ring-white/10 transition-transform active:scale-95"><Camera /></button>}
               {phase === 'captured' && <>
                 <button onClick={() => void start(facing)} className="btn"><RotateCcw size={16} />Retake</button>
                 <button onClick={use} className="btn btn-primary px-5"><Send size={16} />Use this photo</button>

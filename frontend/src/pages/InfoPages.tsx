@@ -58,13 +58,13 @@ export function HelpPage() {
     ['Does it verify that power is off?', 'No. The safety checkboxes record your own statements. The server keeps power-sensitive steps locked until you record both, but only your tester can confirm a circuit is dead.'],
     ['Where do my photos go?', 'Photos you send are stored privately with your repair session on the FixSaathi server. Live video frames are not stored, except a single frame when the AI marks a part.'],
     ['Are AI answers always right?', 'No. Confidence values are AI estimates. Check every step and ask a senior technician when unsure.'],
-    ['Is voice mode live streaming?', 'Voice mode uses your browser for speech recognition and speech output, and Gemini for the answers. It is not Gemini Live streaming. Chrome on Android or desktop works best.'],
+    ['How does voice work?', 'Tap the microphone, speak, then press Done: only then is your message sent. Your browser turns speech into text and Gemini answers through the FixSaathi server. With the speaker on, the answer is read aloud with the best voice on your device. Chrome, Edge and Safari support voice input.'],
   ]
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-8 md:px-8">
       <PageHeader eyebrow="Support" title="Help and Support" subtitle="How FixSaathi works, what it can and cannot do, and how your data is handled." />
       <div className="space-y-2">{faq.map(([q, a]) => <details key={q} className="card group px-5 py-4"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-medium marker:hidden">{q}<span className="text-ink-3 transition-transform group-open:rotate-45" aria-hidden>+</span></summary><p className="mt-2 text-sm leading-relaxed text-ink-2">{a}</p></details>)}</div>
-      <button onClick={() => { newSession(); nav('/assistant') }} className="btn btn-brand mt-6"><MessageSquareText size={16} />Ask the assistant</button>
+      <button onClick={() => { newSession(); nav('/chat') }} className="btn btn-brand mt-6"><MessageSquareText size={16} />Ask the assistant</button>
     </div>
   )
 }

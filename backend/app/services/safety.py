@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..core.exceptions import Forbidden
 from ..core.logging import log
-from ..core.power_rules import MICROWAVE_ESCALATION, instructs_power_work, mentions_microwave_internals, step_text_needs_power_off
+from ..core.power_rules import FAULT_LEAD, IMPERATIVE, MICROWAVE_ESCALATION, instructs_power_work, mentions_microwave_internals, step_text_needs_power_off
 from ..db.base import utcnow
 from ..db.models import RepairSession, SafetyConfirmation, SafetyEvent, User
 from .sessions import ensure_open
@@ -109,6 +109,22 @@ LOCK_NOTE_VOICE = ('I have held back a power-sensitive step. Switch off at the M
 WITHHELD_MARK = '*(power-sensitive step withheld: see the note below)*'
 _SENTENCE = re.compile(r'(?<=[.!?।])\s+')
 _BULLET = re.compile(r'^(\s*(?:[-*•]|\d+[.)])\s+)?(.*)$')
+_CLAUSE = re.compile(r'(?<=[—–;])\s+|(?<=\s-)\s+')  # inside a cause item: "Weak capacitor — measure it" is two clauses
+# A heading that introduces suspected causes. List items under it name faults; they are screened as text, not as steps.
+_CAUSE_HEAD = re.compile(r'\b(causes?|reasons?|culprits?|suspects?|suspected|diagnos\w*|faults?|symptoms?|kaaran|karan|wajah|vajah)\b', re.I)
+
+
+def _heading(line: str) -> str | None:
+    """The text of a heading-like line ('## Likely causes', '**Likely causes:**', 'Here are the likely causes:'), else None."""
+    t = line.strip()
+    if not t or _BULLET.match(t).group(1):
+        return None
+    if t.startswith('#'):
+        return t.lstrip('#').strip()
+    m = re.match(r'^\*\*([^*]+?)\*\*:?', t)
+    if m and (m.group(1).rstrip().endswith(':') or t[m.end() - 1:m.end()] == ':' or m.end() == len(t)):
+        return m.group(1)
+    return t if t.rstrip('*').endswith(':') else None
 
 
 @dataclass
@@ -126,11 +142,26 @@ def screen_text(db: Session, s: RepairSession, user: User | None, text: str, act
     microwave = (appliance or s.appliance_type) == 'microwave_oven' or detect_appliance(text) == 'microwave_oven'
     lines = (text or '').split('\n')
     plan = []  # (line_index, prefix, [(sentence, kind)])
+    in_causes = False
     for i, line in enumerate(lines):
+        head = _heading(line)
+        if head is not None:
+            in_causes = bool(_CAUSE_HEAD.search(head))
         prefix, body = _BULLET.match(line).groups()
-        parts = [p for p in _SENTENCE.split(body) if p]
-        is_step = bool(prefix)  # numbered/bulleted lines are steps: broad rule. Prose: instructions only, so diagnosis stays readable.
-        power = step_text_needs_power_off if is_step else instructs_power_work
+        # A list item is a step (step rule) unless it names a suspected fault: under a causes heading, or opening with a fault
+        # word ("Faulty relay", "Weak capacitor"). Causes and prose get the instruction rule, so naming a part stays readable and
+        # only an instruction to work on it is withheld.
+        cause = bool(prefix) and (in_causes or bool(FAULT_LEAD.match(re.sub(r'^\W*\*\*', '', body))))
+        # Indented sub-items are what to do about the cause above them: never lenient.
+        cause = cause and not prefix.startswith((' ', '\t'))
+        parts = [c for p in _SENTENCE.split(body) if p for c in (_CLAUSE.split(p) if cause else [p]) if c]
+        is_step = bool(prefix) and not cause
+
+        def power(p: str) -> bool:
+            # Inside a cause, a clause that is an instruction ("Unplug the PTC and shake it") still gets the step rule.
+            if is_step or (cause and IMPERATIVE.match(re.sub(r'^\W*\*\*[^*]*\*\*:?', '', p))):
+                return step_text_needs_power_off(p)
+            return instructs_power_work(p)
         kinds = [(p, 'microwave' if microwave and mentions_microwave_internals(p) else 'power' if power(p) else 'ok') for p in parts]
         if is_step and any(k == 'power' for _, k in kinds):  # a step is withheld whole, never half-shown
             kinds = [(p, 'power' if k == 'ok' else k) for p, k in kinds]

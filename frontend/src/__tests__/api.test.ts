@@ -62,6 +62,24 @@ describe('api client', () => {
     expect(store['fixsaathi.refresh']).toBeUndefined()
   })
 
+  it('uses the token another tab just rotated instead of signing everyone out', async () => {
+    await new Promise(r => setTimeout(r, 5))
+    const store: Record<string, string> = {}
+    vi.stubGlobal('localStorage', { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => { store[k] = v }, removeItem: (k: string) => { delete store[k] } })
+    tokens.set('old-access', 'refresh-1')
+    const sent: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (!url.endsWith('/auth/refresh')) return init && (init.headers as Record<string, string>).Authorization === 'Bearer new-access' ? json(200, []) : json(401, { error: { code: 'TOKEN_EXPIRED', message: 'expired' } })
+      const rt = JSON.parse(String(init?.body)).refresh_token as string
+      sent.push(rt)
+      if (rt === 'refresh-1') { store['fixsaathi.refresh'] = 'refresh-2'; return json(401, { error: { code: 'REFRESH_INVALID', message: 'used' } }) }  // the other tab won the race
+      return json(200, { access_token: 'new-access', refresh_token: 'refresh-3' })
+    }))
+    await expect(api('/api/v1/sessions')).resolves.toEqual([])
+    expect(sent).toEqual(['refresh-1', 'refresh-2'])
+    expect(store['fixsaathi.refresh']).toBe('refresh-3')
+  })
+
   it('turns proxy errors without a JSON body into a readable message', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>503</html>', { status: 503, headers: { 'content-type': 'text/html' } })))
     const e = await api('/api/v1/x').catch(x => x) as ApiError

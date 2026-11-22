@@ -26,3 +26,12 @@ describe('speakable', () => {
     expect(speakable('**Switch off** the MCB [mfr:x-1].\n- Then test')).toBe('Switch off the MCB.\nThen test')
   })
 })
+
+describe('italic', () => {
+  it('renders *italic* without touching bullets or multiplication', async () => {
+    const { parseInline, speakable } = await import('../utils/text')
+    expect(parseInline('*(power-sensitive step withheld)*')).toEqual([{ t: 'italic', v: '(power-sensitive step withheld)' }])
+    expect(parseInline('2*3 and 4*5').every(x => x.t === 'text')).toBe(true)
+    expect(speakable('*(step withheld)* now')).toBe('(step withheld) now')
+  })
+})

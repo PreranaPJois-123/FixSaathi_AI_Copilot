@@ -11,6 +11,7 @@ Base: `/api/v1`. Errors always look like `{"error": {"code", "message", "details
 | AppContext.send (first message) | `POST /sessions` | repair_sessions |
 | Composer / CameraModal → photo | `POST /sessions/{id}/images` (multipart) | media + file in storage |
 | AppContext.send | `POST /sessions/{id}/messages` | conversations (user + AI reply) |
+| ChatPage (reply to a voice message, speaker on) / Read aloud | `GET /sessions/{id}/messages/{message_id}/speech?voice=` → `audio/wav` (Gemini TTS; 503 `MODEL_NOT_CONFIGURED` / `QUOTA_EXCEEDED` → the app uses the browser voice). See VOICE.md | |
 | AssistantPage (open existing) | `GET /sessions/{id}/messages` | |
 | Sidebar recent, History, My Repairs | `GET /sessions`, `GET /history?open_only=` | |
 | RepairSessionPage → Run diagnosis | `POST /sessions/{id}/diagnose`, `GET .../diagnosis` | diagnosis_results, ai_usage |

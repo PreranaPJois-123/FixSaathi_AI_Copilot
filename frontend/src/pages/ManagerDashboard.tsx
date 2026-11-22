@@ -1,11 +1,12 @@
+import { Link } from 'react-router-dom'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { EmptyState, ErrorState, PageHeader, Skeleton } from '../components/common/ui'
 import { dashboardService } from '../services'
 import { useAsync } from '../hooks/useAsync'
 import { useAuth } from '../context/AuthContext'
 
-const tip = { background: '#162133', border: '1px solid #2a3a55', borderRadius: 12, color: '#eef2f8', fontSize: 12, boxShadow: '0 12px 30px -12px rgba(0,0,0,.6)' }
-const axis = { stroke: '#75839b', fontSize: 12 }
+const tip = { background: 'var(--color-surface)', border: '1px solid var(--color-line-2)', borderRadius: 12, color: 'var(--color-ink)', fontSize: 12, boxShadow: 'var(--shadow-pop)' }
+const axis = { stroke: 'var(--color-ink-3)', fontSize: 12 }
 const pct = (v: number | null) => v === null ? null : `${Math.round(v * 100)}%`
 
 export default function ManagerDashboard() {
@@ -16,7 +17,8 @@ export default function ManagerDashboard() {
   const o = data?.overview
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 md:px-8">
-      <PageHeader eyebrow="Team" title="Manager workspace" subtitle={`Live data for ${user?.organisation_name ?? 'your organisation'}. Metrics show "not enough data" until records exist.`} />
+      <PageHeader eyebrow="Team" title="Manager workspace" subtitle={`Live data for ${user?.organisation_name ?? 'your organisation'}. Metrics show "not enough data" until records exist.`}
+        right={<div className="flex flex-wrap gap-2"><Link to="/history" className="btn btn-sm">Team repair history</Link><Link to="/senior" className="btn btn-sm">Escalations</Link><Link to="/reports" className="btn btn-sm">Service reports</Link></div>} />
       {loading && <div className="space-y-4"><Skeleton className="h-24" /><Skeleton className="h-72" /></div>}
       {error && <ErrorState message={error} onRetry={retry} />}
       {data && o && (<>
@@ -40,8 +42,8 @@ export default function ManagerDashboard() {
                   <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#38bdf8" stopOpacity={0.4} /><stop offset="100%" stopColor="#38bdf8" stopOpacity={0} /></linearGradient>
                   <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2dd4bf" stopOpacity={0.35} /><stop offset="100%" stopColor="#2dd4bf" stopOpacity={0} /></linearGradient>
                 </defs>
-                <CartesianGrid stroke="#1d2a3f" vertical={false} /><XAxis dataKey="day" {...axis} tickLine={false} axisLine={false} /><YAxis {...axis} tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip contentStyle={tip} /><Legend iconType="circle" wrapperStyle={{ fontSize: 12, color: '#a5b1c5' }} />
+                <CartesianGrid stroke="var(--color-line)" vertical={false} /><XAxis dataKey="day" {...axis} tickLine={false} axisLine={false} /><YAxis {...axis} tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={tip} /><Legend iconType="circle" wrapperStyle={{ fontSize: 12, color: 'var(--color-ink-2)' }} />
                 <Area type="monotone" dataKey="sessions" name="Sessions" stroke="#38bdf8" strokeWidth={2} fill="url(#g1)" /><Area type="monotone" dataKey="completed" name="Completed" stroke="#2dd4bf" strokeWidth={2} fill="url(#g2)" />
               </AreaChart>
             </ResponsiveContainer>
@@ -51,7 +53,7 @@ export default function ManagerDashboard() {
           <section className="card card-pad" aria-labelledby="tech-h">
             <h2 id="tech-h" className="mb-3 font-semibold">Technician activity</h2>
             {data.technicians.length === 0 ? <EmptyState title="No technician activity yet" hint="Sessions from your team appear here." /> :
-              <div className="h-64" role="img" aria-label="Bar chart of sessions per technician"><ResponsiveContainer><BarChart data={data.technicians} margin={{ left: -16 }}><CartesianGrid stroke="#1d2a3f" vertical={false} /><XAxis dataKey="name" {...axis} tickLine={false} axisLine={false} /><YAxis {...axis} tickLine={false} axisLine={false} allowDecimals={false} /><Tooltip contentStyle={tip} cursor={{ fill: '#162133' }} /><Legend iconType="circle" wrapperStyle={{ fontSize: 12, color: '#a5b1c5' }} /><Bar dataKey="sessions" name="Sessions" fill="#5b8cff" radius={[6, 6, 0, 0]} /><Bar dataKey="escalated" name="Escalated" fill="#fbbf24" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div>}
+              <div className="h-64" role="img" aria-label="Bar chart of sessions per technician"><ResponsiveContainer><BarChart data={data.technicians} margin={{ left: -16 }}><CartesianGrid stroke="var(--color-line)" vertical={false} /><XAxis dataKey="name" {...axis} tickLine={false} axisLine={false} /><YAxis {...axis} tickLine={false} axisLine={false} allowDecimals={false} /><Tooltip contentStyle={tip} cursor={{ fill: '#162133' }} /><Legend iconType="circle" wrapperStyle={{ fontSize: 12, color: 'var(--color-ink-2)' }} /><Bar dataKey="sessions" name="Sessions" fill="#5b8cff" radius={[6, 6, 0, 0]} /><Bar dataKey="escalated" name="Escalated" fill="#fbbf24" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div>}
           </section>
           <section className="card card-pad" aria-labelledby="rate-h">
             <h2 id="rate-h" className="mb-3 font-semibold">Feedback ratings</h2>

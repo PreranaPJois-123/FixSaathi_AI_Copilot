@@ -7,6 +7,7 @@ export function speakable(s: string): string {
   return s
     .replace(CITATION, '')
     .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/(?<![\w*])\*(?!\s)([^*\n]+?)\*(?![\w*])/g, '$1')
     .replace(/`([^`]+)`/g, '$1')
     .replace(/^\s*#{1,6}\s+/gm, '')
     .replace(/^\s*[-*•]\s+/gm, '')
@@ -16,19 +17,20 @@ export function speakable(s: string): string {
     .trim()
 }
 
-export type Inline = { t: 'text' | 'bold' | 'code' | 'cite'; v: string }
+export type Inline = { t: 'text' | 'bold' | 'italic' | 'code' | 'cite'; v: string }
 export type Block = { t: 'p'; inl: Inline[] } | { t: 'ul' | 'ol'; items: Inline[][]; start?: number }
 
-/** Inline Markdown: **bold**, `code`, [record:id] citations. Everything else stays literal text. */
+/** Inline Markdown: **bold**, *italic*, `code`, [record:id] citations. Everything else stays literal text. */
 export function parseInline(s: string): Inline[] {
   const out: Inline[] = []
-  const re = /\*\*(.+?)\*\*|`([^`]+)`|\[([a-z]+:[^\]\s]{1,110})\]/g
+  const re = /\*\*(.+?)\*\*|`([^`]+)`|\[([a-z]+:[^\]\s]{1,110})\]|(?<![\w*])\*(?!\s)([^*\n]+?)\*(?![\w*])/g
   let last = 0
   for (let m = re.exec(s); m; m = re.exec(s)) {
     if (m.index > last) out.push({ t: 'text', v: s.slice(last, m.index) })
     if (m[1] !== undefined) out.push({ t: 'bold', v: m[1] })
     else if (m[2] !== undefined) out.push({ t: 'code', v: m[2] })
-    else out.push({ t: 'cite', v: m[3] })
+    else if (m[3] !== undefined) out.push({ t: 'cite', v: m[3] })
+    else out.push({ t: 'italic', v: m[4] })
     last = re.lastIndex
   }
   if (last < s.length) out.push({ t: 'text', v: s.slice(last) })

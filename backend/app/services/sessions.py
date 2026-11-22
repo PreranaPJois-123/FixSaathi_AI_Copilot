@@ -1,4 +1,4 @@
-import secrets, uuid
+import re, secrets, uuid
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from ..core.exceptions import Conflict
@@ -52,6 +52,31 @@ def _title_from(issue: str, limit: int = 60) -> str:
     return t
 
 
+_FILLER = {'hi', 'hello', 'hey', 'namaste', 'please', 'pls', 'kindly', 'help', 'me', 'can', 'could', 'you', 'i', 'have', 'has', 'got', 'need', 'there',
+           'my', 'our', 'the', 'a', 'an', 'this', 'that', 'is', 'are', 'was', 'were', 'it', 'its', "it's", 'but', 'and', 'so', 'very', 'really', 'just',
+           'customer', "customer's", 'with', 'of', 'to', 'some', 'problem', 'issue', 'facing', 'getting', 'seems', 'still',
+           'at', 'all', 'since', 'today', 'yesterday', 'now', 'properly', 'suddenly', 'again', 'also'}
+_NEGATIONS = re.compile(r"\b(?:isn'?t|is not|doesn'?t|does not|don'?t|do not|won'?t|will not|wont|can'?t|cannot|not)\b", re.I)
+
+
+def chat_title(issue: str, appliance_type: str) -> str:
+    """A short, readable conversation title from the first message, e.g. 'Ceiling Fan Not Rotating' or 'LG Split AC Showing CH38'."""
+    first = _title_from(issue, limit=200)
+    words = [w for w in re.split(r'[\s,;:()"]+', _NEGATIONS.sub(' not ', first).rstrip('.')) if w]
+    keep: list[str] = []
+    for w in words:
+        if w.lower() in _FILLER or (w.lower() == 'not' and keep and keep[-1] == 'Not'):
+            continue
+        keep.append('Not' if w.lower() == 'not' else w if any(c.isupper() for c in w[1:]) or any(c.isdigit() for c in w) or w.isupper() else w.capitalize())
+        if len(keep) == 6:
+            break
+    while keep and keep[-1] in ('Not', 'In', 'On', 'At', 'For', 'From', 'Or'):
+        keep.pop()
+    if len(keep) < 2:
+        return f'{APPLIANCE_LABELS.get(appliance_type, "Appliance")} Repair'
+    return ' '.join(keep)[:80]
+
+
 def create_session(db: Session, user: User, appliance_type: str | None, issue: str, title: str | None) -> RepairSession:
     app = appliance_type or guess_appliance(issue)
     ref = None
@@ -61,7 +86,7 @@ def create_session(db: Session, user: User, appliance_type: str | None, issue: s
             ref = cand; break
     s = RepairSession(id=uuid.uuid4(), reference=ref or 'FS-' + uuid.uuid4().hex[:8].upper(), technician_id=user.id, organisation_id=user.organisation_id,
                       appliance_type=app, issue_description=issue.strip(), status='active',
-                      title=(title or _title_from(issue) or f'{APPLIANCE_LABELS.get(app, "Appliance")} repair'))
+                      appliance_details={} if title else {'title_auto': True}, title=(title or chat_title(issue, app)))
     db.add(s); db.flush()
     return s
 

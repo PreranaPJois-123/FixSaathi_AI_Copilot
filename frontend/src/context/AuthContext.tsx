@@ -47,6 +47,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>
 }
 
+/** The auth context when inside AuthProvider, otherwise null (for components that also render on their own, e.g. in tests). */
+export function useMaybeAuth() { return useContext(AuthCtx) }
+
 export function useAuth() {
   const c = useContext(AuthCtx)
   if (!c) throw new Error('useAuth must be used inside AuthProvider')

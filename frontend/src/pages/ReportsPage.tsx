@@ -1,9 +1,9 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Download, FileText, Printer } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, FileText, Loader2, Printer } from 'lucide-react'
 import { EmptyState, ErrorState, PageHeader, Skeleton, StatusPill } from '../components/common/ui'
-import { historyService } from '../services'
+import { historyService, sessionService } from '../services'
 import { useAsync } from '../hooks/useAsync'
-import type { Report } from '../types'
 
 export function ReportsList() {
   const { data, loading, error, retry } = useAsync(() => historyService.reports(), [])
@@ -25,24 +25,15 @@ export function ReportsList() {
   )
 }
 
-function asText(r: Report): string {
-  const d = r.data
-  return [`FixSaathi service report ${r.reference}`, ...(d.demo ? ['DEMO SCENARIO: diagnosis and steps are scripted sample content, not live AI.'] : []), `Session: ${d.session.reference}`, `Appliance: ${d.session.appliance}`, `Technician: ${d.session.technician ?? ''}`,
-    `Started: ${new Date(d.session.started_at).toLocaleString()}`, `Outcome: ${d.resolution.outcome}`, '', `Customer issue: ${d.customer_issue}`,
-    `Diagnosis (AI estimate): ${d.diagnosis?.problem_summary ?? 'none'}`, ...(d.diagnosis?.faults ?? []).map(f => `  - ${f.fault} (${Math.round(f.confidence * 100)}% AI estimate)`),
-    'Steps performed:', ...d.steps_performed.map(s => `  ${s.step_number}. ${s.title}`), 'Steps not performed:', ...d.steps_not_performed.map(s => `  ${s.step_number}. ${s.title}`),
-    `Parts identified: ${d.parts_identified.map(p => p.name).join(', ') || 'none'}`,
-    `Safety statements (final): power off ${d.safety.final_state.power_off_confirmed ? 'yes' : 'no'}, tester ${d.safety.final_state.tester_checked ? 'yes' : 'no'}; blocked attempts: ${d.safety.blocked_attempts}`,
-    d.safety.disclaimer, `Notes: ${d.resolution.notes ?? ''}`].join('\n')
-}
-
 export function ReportDetailPage() {
   const { id = '' } = useParams()
   const { data, loading, error, retry } = useAsync(() => historyService.report(id), [id])
-  const download = () => {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const download = async () => {
     if (!data) return
-    const url = URL.createObjectURL(new Blob([asText(data)], { type: 'text/plain' }))
-    const a = document.createElement('a'); a.href = url; a.download = `${data.reference}-service-report.txt`; a.click(); URL.revokeObjectURL(url)
+    setBusy(true); setErr(null)
+    try { await sessionService.downloadPdf(data.session_id, data.session_reference) } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
   }
   const sec = 'border-t border-line py-5'
   const h2 = 'section-label mb-2'
@@ -54,7 +45,8 @@ export function ReportDetailPage() {
       {error && <ErrorState message={error} onRetry={retry} />}
       {data && d && (<>
         <PageHeader title={`Report ${data.reference}`} subtitle={`${d.session.appliance} · ${new Date(data.created_at).toLocaleDateString()} · ${d.session.technician ?? ''}`}
-          eyebrow="Service report" right={<div className="flex items-center gap-2 print:hidden"><button onClick={download} className="btn"><Download size={15} />Download</button><button onClick={() => window.print()} className="btn btn-brand"><Printer size={15} />Print / PDF</button></div>} />
+          eyebrow="Service report" right={<div className="flex items-center gap-2 print:hidden"><button onClick={() => window.print()} className="btn"><Printer size={15} />Print</button><button onClick={() => void download()} disabled={busy} className="btn btn-primary">{busy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}Download PDF</button></div>} />
+        {err && <p role="alert" className="mb-4 rounded-xl border border-crit/40 bg-crit/10 px-4 py-2.5 text-sm text-crit">{err}</p>}
         <div className="card card-pad">
         <StatusPill status={data.resolution_status} />
         {d.demo && <p role="note" className="mt-3 rounded-2xl border border-warn/50 bg-warn/10 px-4 py-3 text-sm text-warn"><b>Demo scenario report.</b> The diagnosis and steps came from scripted sample content, not live AI. Safety statements and steps performed are real records from this session.</p>}
