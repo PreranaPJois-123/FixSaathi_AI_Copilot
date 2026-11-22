@@ -62,7 +62,15 @@ def list_sessions(status: str | None = None, appliance_type: str | None = None, 
 
 @router.get('/sessions/{session_id}', response_model=SessionOut)
 def get_session(session_id: uuid.UUID, u: User = Depends(current_user), db: Session = Depends(get_db, scope="function")):
-    return session_out(db, get_readable_session(db, u, session_id))
+    return session_out(db, _open_chat(db, u, session_id))
+
+
+def _open_chat(db: Session, u: User, session_id: uuid.UUID) -> RepairSession:
+    """A deleted chat cannot be opened as a chat by anyone. Its work records (escalations, history, service reports) are kept."""
+    s = get_readable_session(db, u, session_id)
+    if s.hidden_at is not None:
+        raise NotFound('Chat not found.')
+    return s
 
 
 @router.patch('/sessions/{session_id}', response_model=SessionOut)
@@ -113,7 +121,7 @@ def cancel(session_id: uuid.UUID, u: User = Depends(current_user), db: Session =
 
 @router.get('/sessions/{session_id}/messages', response_model=Page)
 def messages(session_id: uuid.UUID, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), u: User = Depends(current_user), db: Session = Depends(get_db, scope="function")):
-    s = get_readable_session(db, u, session_id)
+    s = _open_chat(db, u, session_id)
     q = select(Conversation).where(Conversation.session_id == s.id)
     total = db.scalar(select(func.count()).select_from(q.subquery()))
     rows = db.scalars(q.order_by(Conversation.created_at).limit(limit).offset(offset)).all()

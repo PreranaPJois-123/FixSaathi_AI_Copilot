@@ -57,3 +57,13 @@ def test_messages_with_ai(client, tech, session_id, fake):
 def test_pagination_validation(client, tech):
     assert client.get('/api/v1/sessions?limit=0', headers=tech['h']).status_code == 422
     assert client.get('/api/v1/sessions/not-a-uuid', headers=tech['h']).status_code == 422
+
+def test_delete_own_session(client, tech, session_id):
+    assert client.delete(f'/api/v1/sessions/{session_id}', headers=tech['h']).status_code == 204
+    assert client.get(f'/api/v1/sessions/{session_id}', headers=tech['h']).status_code == 404
+    assert client.get('/api/v1/sessions', headers=tech['h']).json()['total'] == 0
+
+
+def test_delete_other_users_session_rejected(client, session_id):
+    other = register(client, org='Acme Service')
+    assert client.delete(f'/api/v1/sessions/{session_id}', headers=other['h']).status_code == 404

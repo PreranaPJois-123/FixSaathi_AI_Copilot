@@ -1,6 +1,8 @@
-import io
+import io, uuid
 from pypdf import PdfReader
 from app.api.v1.sessions import wants_pdf
+from app.db.models import RepairSession
+from app.db.session import SessionLocal
 from app.services.sessions import chat_title
 from tests.conftest import make_role, register
 
@@ -63,8 +65,11 @@ def test_delete_hides_the_chat_but_keeps_records(client, tech, session_id):
     assert client.delete(f'/api/v1/sessions/{session_id}', headers=other['h']).status_code == 404
     assert client.delete(f'/api/v1/sessions/{session_id}', headers=tech['h']).status_code == 204
     assert client.get('/api/v1/sessions?mine=true', headers=tech['h']).json()['total'] == 0
-    s = client.get(f'/api/v1/sessions/{session_id}', headers=tech['h']).json()
-    assert s['status'] == 'cancelled'  # an open chat that was deleted is closed, not left 'active'
+    assert client.get(f'/api/v1/sessions/{session_id}', headers=tech['h']).status_code == 404  # gone as a chat
+    assert client.get(f'/api/v1/sessions/{session_id}/messages', headers=tech['h']).status_code == 404
+    with SessionLocal() as db:
+        s = db.get(RepairSession, uuid.UUID(session_id))
+        assert s is not None and s.hidden_at is not None and s.status == 'cancelled'  # kept, and closed rather than left 'active'
     assert len(client.get('/api/v1/escalations', headers=tech['h']).json()) == 1  # records kept
     assert client.get('/api/v1/history', headers=tech['h']).json()['total'] == 1
     assert client.delete(f'/api/v1/sessions/{session_id}', headers=tech['h']).status_code == 204  # idempotent
