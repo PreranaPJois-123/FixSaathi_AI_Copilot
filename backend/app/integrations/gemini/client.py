@@ -118,12 +118,17 @@ class GeminiClient:
             raise AIUnavailable('The natural voice has reached its limit for now.', code='QUOTA_EXCEEDED', details={'model': model, 'retry_after_s': int(until - time.time())})
         cfg = types.GenerateContentConfig(response_modalities=['AUDIO'], speech_config=types.SpeechConfig(
             voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice))))
-        resp, meta = await self._call('tts', model, lambda: self.raw_beta.aio.models.generate_content(model=model, contents=f'{direction or TTS_STYLE}\n\n{text}', config=cfg))
-        for c in getattr(resp, 'candidates', None) or []:
-            for p in (getattr(getattr(c, 'content', None), 'parts', None) or []):
-                d = getattr(p, 'inline_data', None)
-                if d is not None and (d.mime_type or '').startswith('audio') and d.data:
-                    return d.data, meta
+        # The preview TTS model now and then answers STOP with no audio part (22 Nov: once in production, once locally; the
+        # identical request then succeeded). One retry covers it; a second empty answer lets the app use the device voice.
+        for attempt in range(2):
+            resp, meta = await self._call('tts', model, lambda: self.raw_beta.aio.models.generate_content(model=model, contents=f'{direction or TTS_STYLE}\n\n{text}', config=cfg))
+            cands = getattr(resp, 'candidates', None) or []
+            for c in cands:
+                for p in (getattr(getattr(c, 'content', None), 'parts', None) or []):
+                    d = getattr(p, 'inline_data', None)
+                    if d is not None and (d.mime_type or '').startswith('audio') and d.data:
+                        return d.data, meta
+            log(logger, 'tts_empty_audio', logging.WARNING, model=model, attempt=attempt, finish=str(getattr(cands[0], 'finish_reason', None)) if cands else 'NO_CANDIDATES')
         raise AIError('The voice model returned no audio.', code='AI_EMPTY', details={'op': 'tts'})
 
     async def _call(self, op: str, model: str, fn, last_resort: bool = True):

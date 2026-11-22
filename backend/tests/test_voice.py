@@ -172,3 +172,35 @@ def test_speech_request_carries_the_direction(client, tech, session_id, fake):
     client.get(f'/api/v1/sessions/{session_id}/messages/{mid}/speech', headers=tech['h'])
     call = next(c for c in fake.calls if c[0] == 'tts')
     assert 'Indian English' in call[3] and 'firm, serious' in call[3]
+
+
+def test_tts_empty_audio_is_retried_once(monkeypatch):
+    """22 Nov: the preview TTS model sometimes answers STOP without audio; the identical request then succeeds."""
+    from app.config import get_settings
+    s = get_settings()
+    monkeypatch.setattr(s, 'gemini_api_key', 'test'); monkeypatch.setattr(s, 'gemini_tts_model', 'tts-m')
+    calls = []
+
+    class Part:
+        inline_data = type('D', (), {'mime_type': 'audio/L16;codec=pcm;rate=24000', 'data': b'\x01\x02'})()
+
+    def resp(parts):
+        return type('R', (), {'candidates': [type('Cn', (), {'content': type('Ct', (), {'parts': parts})(), 'finish_reason': 'STOP'})()], 'usage_metadata': None})()
+
+    class Models:
+        async def generate_content(self, **kw):
+            calls.append(1)
+            return resp(None if len(calls) == 1 else [Part()])
+    g = gclient.GeminiClient(client=type('C', (), {'aio': type('A', (), {'models': Models()})()})())
+    pcm, _ = asyncio.run(g.speech('Switch off the MCB.', 'Charon'))
+    assert pcm == b'\x01\x02' and len(calls) == 2
+
+    calls.clear()
+
+    class Empty:
+        async def generate_content(self, **kw):
+            calls.append(1); return resp(None)
+    g = gclient.GeminiClient(client=type('C', (), {'aio': type('A', (), {'models': Empty()})()})())
+    with pytest.raises(Exception) as e:
+        asyncio.run(g.speech('x', 'Charon'))
+    assert e.value.code == 'AI_EMPTY' and len(calls) == 2  # retried once, then the app falls back to the device voice
