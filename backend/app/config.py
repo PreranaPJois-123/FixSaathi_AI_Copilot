@@ -36,6 +36,16 @@ class Settings(BaseSettings):
     gemini_tts_model: str | None = None
     # One of TTS_VOICES in the Gemini client. Charon: chosen 21 Nov from six measured samples (see docs/VOICE.md).
     gemini_tts_voice: str = 'Charon'
+    # ElevenLabs (the technician's own cloned voice). Used first for spoken replies when key and voice id are set; Gemini TTS
+    # and then the browser voice are the fallbacks. Gemini still writes every reply.
+    elevenlabs_api_key: str | None = None
+    elevenlabs_voice_id: str | None = None
+    elevenlabs_model: str = 'eleven_multilingual_v2'
+    elevenlabs_model_kannada: str | None = None   # empty: Kannada uses elevenlabs_model
+    elevenlabs_timeout_seconds: float = 30
+    # Diagnostics: true = the personal voice never falls back (no Gemini voice on the server, no device voice in the app);
+    # the ElevenLabs error is shown instead. Keep false in production.
+    voice_strict: bool = False
 
     storage_provider: str = 'local'
     local_storage_path: str = 'uploads'
@@ -54,7 +64,8 @@ class Settings(BaseSettings):
     live_idle_timeout_seconds: int = 300
     auth_rate_limit_per_minute: int = 10
 
-    @field_validator('gemini_api_key', 'gemini_live_model', 'gemini_agent_model', 'gemini_embed_model', 'nano_banana_model', 'gemini_tts_model', mode='before')
+    @field_validator('gemini_api_key', 'gemini_live_model', 'gemini_agent_model', 'gemini_embed_model', 'nano_banana_model', 'gemini_tts_model',
+                     'elevenlabs_api_key', 'elevenlabs_voice_id', 'elevenlabs_model_kannada', mode='before')
     @classmethod
     def _strip(cls, v):
         # A key pasted with quotes, spaces or a newline is a common cause of 'API key not valid'.

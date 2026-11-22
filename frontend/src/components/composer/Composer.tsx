@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type 
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowUp, Camera, Check, FileText, ImagePlus, Loader2, Mic, Paperclip, Plus, Square, Volume2, VolumeX, X } from 'lucide-react'
 import { CameraModal } from '../camera/CameraModal'
-import { LiveWaveform, useSpeaking, useSpeechPhase } from '../voice/Waveform'
+import { LiveWaveform, useSpeaking, useSpeechPhase, useVoiceError } from '../voice/Waveform'
 import { FILE_RULES, fileService, fmtSize } from '../../services'
 import { speech } from '../../services/speech'
 import { useApp } from '../../context/AppContext'
@@ -64,6 +64,7 @@ export function Composer({ onSend, disabled, autoFocus, compact }: Props) {
   const dict = useDictation(language)
   const speaking = useSpeaking()
   const { phase, engine } = useSpeechPhase()
+  const vErr = useVoiceError()
   const [voiceErr, setVoiceErr] = useState<string | null>(null)
   const canSend = !disabled && (text.trim().length > 0 || files.length > 0)
 
@@ -143,7 +144,7 @@ export function Composer({ onSend, disabled, autoFocus, compact }: Props) {
           <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} role="status"
             className="mx-auto mb-2 flex w-fit items-center gap-2.5 rounded-full border border-line bg-surface py-1 pl-3 pr-1 text-xs text-ink-2 shadow-sm">
             <span className="flex h-3 items-end gap-[2px]" aria-hidden>{[0, 1, 2, 3].map(i => <span key={i} className="w-[3px] rounded-full bg-accent" style={{ height: '100%', animation: `fs-wave ${0.6 + i * 0.12}s ease-in-out ${i * 0.08}s infinite` }} />)}</span>
-            {phase === 'preparing' ? `${t('voice.preparing')}…` : <>{t('voice.speaking')}{engine && <span className="text-ink-3">· {t(engine === 'natural' ? 'voice.naturalVoice' : 'voice.deviceVoice')}</span>}</>}
+            {phase === 'preparing' ? `${t('voice.preparing')}…` : <>{t('voice.speaking')}{engine && <span className="text-ink-3">· {t(engine === 'personal' ? 'voice.personalVoice' : engine === 'natural' ? 'voice.naturalVoice' : 'voice.deviceVoice')}</span>}</>}
             <button type="button" onClick={() => speech.stop()} aria-label={t('voice.stopSpeaking')} className="inline-flex items-center gap-1 rounded-full bg-surface-3 px-2.5 py-1 font-medium text-ink hover:bg-line-2"><Square size={10} fill="currentColor" />{t('voice.stop')}</button>
           </motion.div>
         )}
@@ -217,6 +218,7 @@ export function Composer({ onSend, disabled, autoFocus, compact }: Props) {
           </>)}
         </form>
       </div>
+      {vErr && <p role="alert" className="mt-2 flex items-start justify-between gap-3 rounded-xl border border-crit/40 bg-crit/10 px-3 py-2 text-sm text-crit"><span><b>Your cloned voice did not play.</b> No other voice was used. {vErr.provider ?? 'elevenlabs'} · voice {vErr.voiceId ?? '?'} · HTTP {vErr.http ?? '?'} · {vErr.code}: {vErr.message}</span><button type="button" onClick={() => speech.clearError()} aria-label="Dismiss" className="shrink-0 text-ink-3 hover:text-ink"><X size={14} /></button></p>}
       {voiceErr && <p role="alert" className="mt-2 flex items-start justify-between gap-3 rounded-xl border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">{t(`voice.err.${voiceErr}` as Key)}<button type="button" onClick={() => { setVoiceErr(null); dict.clearError() }} aria-label="Dismiss" className="shrink-0 text-ink-3 hover:text-ink"><X size={14} /></button></p>}
       {errors.length > 0 && <div role="alert" className="mt-2 space-y-1 rounded-xl border border-crit/40 bg-crit/10 px-3 py-2 text-sm text-crit">{errors.map(e => <p key={e}>{e}</p>)}<button type="button" onClick={() => setErrors([])} className="text-xs text-ink-2 underline">Dismiss</button></div>}
       <CameraModal open={camera} onClose={() => setCamera(false)} onUse={a => add([a])} />

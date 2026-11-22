@@ -4,7 +4,7 @@ import { Check, Loader2, LogOut, Monitor, Moon, Play, Sun } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useApp } from '../context/AppContext'
 import { usePrefs, type Rate, type Theme } from '../context/PrefsContext'
-import { AI_VOICES, onVoicesChanged, speech, speechSupported, voicesFor } from '../services/speech'
+import { AI_VOICES, onVoicesChanged, speech, speechSupported, testPersonalVoice, voicesFor, type PersonalTest } from '../services/speech'
 import { LANG_NATIVE, useT, type Key } from '../i18n'
 import type { Language } from '../types'
 
@@ -50,6 +50,8 @@ export default function SettingsPage() {
     setBusy(l); setErr(null); setSaved(false)
     try { await setLanguage(l); setSaved(true); setTimeout(() => setSaved(false), 2000) } catch (e) { setErr((e as Error).message) } finally { setBusy(null) }
   }
+  const [pTest, setPTest] = useState<PersonalTest | 'busy' | null>(null)
+  const testPersonal = async () => { setPTest('busy'); setPTest(await testPersonalVoice()) }
   const test = () => speech.speak(t('settings.voiceSample'), { language, voiceURI: prefs.voiceURI, rate: prefs.rate, aiVoice: 'device' })
   const signOut = async () => { speech.stop(); await logout(); newSession(); nav('/login', { replace: true }) }
 
@@ -89,6 +91,12 @@ export default function SettingsPage() {
               {AI_VOICES.map(v => <option key={v} value={v}>{t(`voice.v.${v}` as Key)}</option>)}
               <option value="device">{t('settings.deviceOnly')}</option>
             </select>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button onClick={() => void testPersonal()} disabled={pTest === 'busy'} className="btn btn-sm">{pTest === 'busy' ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}{t('settings.testPersonal')}</button>
+              {pTest && pTest !== 'busy' && (pTest.ok
+                ? <span role="status" className="text-xs text-ok">{t('settings.testPersonalOk')} · {pTest.model} · {pTest.voiceId}</span>
+                : <span role="alert" className="text-xs text-crit">{t('settings.testPersonalFail')} {pTest.code}: {pTest.message}</span>)}
+            </div>
           </div>
           {!speechSupported() || voices.length === 0 ? <p className="text-sm text-warn">{t('settings.noVoices')}</p> : (
             <div className="space-y-4">

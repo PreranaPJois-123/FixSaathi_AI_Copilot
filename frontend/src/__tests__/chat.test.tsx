@@ -294,7 +294,7 @@ describe('text vs voice replies', () => {
     const [text, opts] = speak.mock.calls[0]
     expect(text).toBe('Reply to fan is humming')
     expect(opts.source).toEqual({ sessionId: 's1', messageId: expect.stringMatching(/^a/) })
-    expect(opts.aiVoice).toBe('Charon')
+    expect(opts.aiVoice).toBe('personal')  // the technician's own ElevenLabs voice by default
     await type(u, 'and it is slow')
     expect(speak).toHaveBeenCalledTimes(1)  // switched to typing: no more automatic speech
   })
@@ -357,6 +357,29 @@ describe('speech output', () => {
     await u.click(screen.getByRole('button', { name: /Speaker on/ }))
     expect(audio.paused).toBe(true)
     expect(speech.phase()).toBe('idle')
+  })
+
+  it('plays the personal (ElevenLabs) voice when the server used it', async () => {
+    const { speech } = await import('../services/speech')
+    speech._reset(); device()
+    vi.stubGlobal('Audio', FakeAudio)
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:y', revokeObjectURL: () => undefined }))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Blob([new Uint8Array([73, 68, 51])]), { status: 200, headers: { 'content-type': 'audio/mpeg', 'x-voice': 'personal' } })))
+    speech.speak('Switch off the MCB first.', { language: 'English', aiVoice: 'personal', source: { sessionId: 's1', messageId: 'a9' } })
+    await waitFor(() => expect(speech.phase()).toBe('speaking'))
+    expect(speech.engine()).toBe('personal')
+    expect(String((vi.mocked(fetch).mock.calls[0] as unknown[])[0])).toMatch(/speech\?voice=personal$/)
+    speech.stop()
+  })
+
+  it('falls back to the device voice when the ElevenLabs key may not generate speech', async () => {
+    const { speech } = await import('../services/speech')
+    speech._reset(); const said = device()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: 'TTS_KEY_PERMISSION', message: 'not allowed' } }), { status: 503, headers: { 'content-type': 'application/json' } })))
+    speech.speak('Check the regulator.', { language: 'English', aiVoice: 'personal', source: { sessionId: 's1', messageId: 'a1' } })
+    await waitFor(() => expect(said).toEqual(['Check the regulator.']))
+    expect(speech.engine()).toBe('device')
+    speech.stop()
   })
 
   it('falls back to the device voice when the natural voice is out of quota, and stops asking for a while', async () => {

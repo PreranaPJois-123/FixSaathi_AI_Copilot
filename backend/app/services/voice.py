@@ -1,19 +1,21 @@
-"""Spoken replies with Gemini text-to-speech.
+"""Spoken replies: the technician's own ElevenLabs voice first, Gemini text-to-speech as the fallback.
 
 Only stored assistant messages are spoken, so the audio always matches text that already passed the server-side safety screen.
 Withheld power steps stay withheld: their on-screen marker is dropped and the written lock note is replaced by the spoken one.
 """
-import io, re, wave
+import io, logging, re, wave
 from collections import OrderedDict
 from ..config import get_settings
+from ..core.logging import log
 from ..db.models import Conversation
 from ..integrations.gemini.client import TTS_SAMPLE_RATE, TTS_VOICES, get_gemini
 from .pdf_report import _CITATION
 from .safety import LOCK_NOTE, LOCK_NOTE_VOICE, WITHHELD_MARK
 
 MAX_CHARS = 3000
-_CACHE: OrderedDict[tuple[str, str], bytes] = OrderedDict()  # (message id, voice) -> WAV. Replaying a reply costs no request.
+_CACHE: OrderedDict[tuple[str, str], tuple[bytes, str, str]] = OrderedDict()  # (message id, voice) -> audio. Replays cost nothing.
 _CACHE_SIZE = 40
+logger = logging.getLogger('voice')
 
 
 def spoken_text(message: str) -> str:
@@ -95,24 +97,65 @@ def wav(pcm: bytes, rate: int = TTS_SAMPLE_RATE) -> bytes:
     return buf.getvalue()
 
 
+PERSONAL = 'personal'  # the technician's own ElevenLabs voice clone
+
+
 def voice_name(requested: str | None) -> str:
+    """'personal' (ElevenLabs) when asked for or by default when it is configured; otherwise a Gemini prebuilt voice."""
+    from ..integrations import elevenlabs
+    if requested == PERSONAL or (not requested and elevenlabs.configured()):
+        return PERSONAL if elevenlabs.configured() else get_settings().gemini_tts_voice
     v = requested or get_settings().gemini_tts_voice
     return v if v in TTS_VOICES else 'Charon'
 
 
-async def speak(m: Conversation, voice: str | None) -> tuple[bytes, str]:
+async def _gemini(text: str, v: str) -> tuple[bytes, str, str]:
+    pcm, _ = await get_gemini().speech(text, v, direction(text))
+    return wav(pcm), 'audio/wav', v
+
+
+def provider_of(voice_used: str) -> str:
+    return 'elevenlabs' if voice_used == PERSONAL else 'gemini'
+
+
+async def speak(m: Conversation, voice: str | None, strict: bool = False) -> tuple[bytes, str, str]:
+    """(audio, media type, voice used). Personal voice first; if ElevenLabs fails, the Gemini voice; the app falls back to the
+    device voice when both fail. strict=True: no fallback, the ElevenLabs error is raised (used to verify the cloned voice).
+    Each (message, voice) is generated once and cached. Every answer logs which provider actually produced the audio."""
+    from ..core.exceptions import AppError
+    from ..integrations import elevenlabs
     v = voice_name(voice)
+    strict = strict or (v == PERSONAL and get_settings().voice_strict)
+    if strict and v != PERSONAL:
+        raise AppError('The personal voice is not configured on the server.', code='MODEL_NOT_CONFIGURED', status=503)
     key = (str(m.id), v)
     if key in _CACHE:
         _CACHE.move_to_end(key)
-        return _CACHE[key], v
+        log(logger, 'speech_provider', provider=provider_of(_CACHE[key][2]), voice=_CACHE[key][2], cached=True, message=str(m.id))
+        return _CACHE[key]
     text = spoken_text(m.message)
     if not text:
-        from ..core.exceptions import AppError
         raise AppError('This message has nothing to read aloud.', code='NOTHING_TO_SPEAK')
-    pcm, _ = await get_gemini().speech(text, v, direction(text))
-    data = wav(pcm)
-    _CACHE[key] = data
+    if v == PERSONAL:
+        try:
+            out = (await elevenlabs.synthesize(text, language_of(text)), elevenlabs.MEDIA_TYPE, PERSONAL)
+            log(logger, 'speech_provider', provider='elevenlabs', voice_id=get_settings().elevenlabs_voice_id,
+                model=elevenlabs.model_for(language_of(text)), language=language_of(text), message=str(m.id), bytes=len(out[0]))
+        except AppError as e:
+            http = (e.details or {}).get('provider_http')
+            if strict or not get_settings().gemini_tts_model:
+                log(logger, 'speech_provider', logging.WARNING, provider='none', wanted='elevenlabs', voice_id=get_settings().elevenlabs_voice_id,
+                    http=http, reason=e.code, strict=strict, message=str(m.id))
+                e.details = {**(e.details or {}), 'strict': strict}
+                raise
+            log(logger, 'speech_fallback', logging.WARNING, wanted='elevenlabs', voice_id=get_settings().elevenlabs_voice_id, http=http, reason=e.code,
+                used='gemini', message=str(m.id))
+            out = await _gemini(text, get_settings().gemini_tts_voice)  # keep a natural voice when ElevenLabs is unavailable
+            log(logger, 'speech_provider', provider='gemini', voice=out[2], fallback_from='elevenlabs', message=str(m.id))
+    else:
+        out = await _gemini(text, v)
+        log(logger, 'speech_provider', provider='gemini', voice=out[2], message=str(m.id))
+    _CACHE[(str(m.id), out[2])] = out
     if len(_CACHE) > _CACHE_SIZE:
         _CACHE.popitem(last=False)
-    return data, v
+    return out

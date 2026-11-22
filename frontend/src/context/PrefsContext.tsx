@@ -29,7 +29,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
   const [speaker, setSpeakerState] = useState(() => read(KEYS.speaker) !== 'off')
   const [voiceURI, setVoiceState] = useState<string | null>(() => read(KEYS.voice))
   const [rate, setRateState] = useState<Rate>(() => ({ '0.92': 0.92, '1.1': 1.1 } as Record<string, Rate>)[read(KEYS.rate) ?? ''] ?? 1)
-  const [aiVoice, setAiVoiceState] = useState<string>(() => { const v = read(KEYS.aiVoice); return v && (v === 'device' || (AI_VOICES as readonly string[]).includes(v)) ? v : 'Charon' })
+  const [aiVoice, setAiVoiceState] = useState<string>(() => { const v = read(KEYS.aiVoice); return v && (v === 'device' || (AI_VOICES as readonly string[]).includes(v)) ? v : 'personal' })
   const [sysLight, setSysLight] = useState(systemLight)
 
   useEffect(() => {

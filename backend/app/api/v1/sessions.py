@@ -161,9 +161,9 @@ async def post_message(session_id: uuid.UUID, body: MessageIn, u: User = Depends
 
 
 @router.get('/sessions/{session_id}/messages/{message_id}/speech')
-async def message_speech(session_id: uuid.UUID, message_id: uuid.UUID, voice: str | None = Query(None, max_length=32),
+async def message_speech(session_id: uuid.UUID, message_id: uuid.UUID, voice: str | None = Query(None, max_length=32), strict: bool = False,
                          u: User = Depends(current_user), db: Session = Depends(get_db, scope="function")):
-    """A stored assistant reply spoken with Gemini text-to-speech (WAV). Requested by the app only for replies to voice messages
+    """A stored assistant reply spoken in the technician's own ElevenLabs voice (MP3), or a Gemini voice (WAV). Requested by the app only for replies to voice messages
     while the speaker is on, or when the technician presses Read aloud. Errors carry a code so the app can fall back to the
     browser's own voice (MODEL_NOT_CONFIGURED, QUOTA_EXCEEDED...)."""
     from ...services import voice as voice_svc
@@ -171,8 +171,47 @@ async def message_speech(session_id: uuid.UUID, message_id: uuid.UUID, voice: st
     m = db.scalar(select(Conversation).where(Conversation.id == message_id, Conversation.session_id == s.id, Conversation.role == 'assistant'))
     if m is None:
         raise NotFound('Message not found.')
-    data, v = await voice_svc.speak(m, voice)
-    return Response(data, media_type='audio/wav', headers={'Cache-Control': 'private, max-age=86400', 'X-Voice': v})
+    data, media_type, v = await voice_svc.speak(m, voice, strict=strict)
+    return Response(data, media_type=media_type, headers={'Cache-Control': 'private, max-age=86400', 'X-Voice': v, 'X-Voice-Provider': voice_svc.provider_of(v)})
+
+
+@router.get('/voice/status')
+def voice_status(u: User = Depends(current_user)):
+    """What the running backend loaded for speech. Never the key itself; its fingerprint only in development."""
+    import hashlib
+    from ...config import get_settings
+    from ...integrations import elevenlabs
+    s = get_settings(); k = s.elevenlabs_api_key or ''
+    return {'preferred': 'elevenlabs' if elevenlabs.configured() else ('gemini' if s.gemini_tts_model else 'device'), 'strict': s.voice_strict,
+            'elevenlabs': {'configured': elevenlabs.configured(), 'key_loaded': bool(k), 'voice_id': s.elevenlabs_voice_id, 'model': s.elevenlabs_model,
+                           'model_kannada': s.elevenlabs_model_kannada or s.elevenlabs_model, 'output_format': elevenlabs.OUTPUT_FORMAT, 'voice_settings': elevenlabs.VOICE_SETTINGS,
+                           **({'key_fingerprint': hashlib.sha256(k.encode()).hexdigest()[:10]} if k and s.app_env != 'production' else {}),
+                           'paused_for_s': max(0, int(elevenlabs._BLOCKED_UNTIL['t'] - __import__('time').time()))},
+            'gemini_tts': {'configured': bool(s.gemini_tts_model), 'model': s.gemini_tts_model, 'voice': s.gemini_tts_voice}}
+
+
+VOICE_TEST_TEXT = 'Hello, this is FixSaathi speaking in your own voice. Switch off the MCB and confirm with your tester before you open anything.'
+
+
+@router.post('/voice/test-personal')
+async def test_personal_voice(u: User = Depends(current_user)):
+    """Settings > Test my cloned voice: one fixed English sentence through ElevenLabs only. No fallback to Gemini or the device
+    voice, so a failure is shown as it is. Costs about 130 ElevenLabs characters per press."""
+    from ...integrations import elevenlabs
+    from ...services import voice as voice_svc
+    from ...config import get_settings
+    if not elevenlabs.configured():
+        raise AppError('ElevenLabs is not configured on the server (ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID).', code='MODEL_NOT_CONFIGURED', status=503)
+    elevenlabs._BLOCKED_UNTIL['t'] = 0  # an explicit test always asks ElevenLabs again
+    try:
+        audio = await elevenlabs.synthesize(VOICE_TEST_TEXT, 'english')
+    except AppError as e:
+        voice_svc.log(voice_svc.logger, 'speech_provider', voice_svc.logging.WARNING, provider='none', wanted='elevenlabs', error=e.code, test=True)
+        raise
+    s = get_settings()
+    voice_svc.log(voice_svc.logger, 'speech_provider', provider='elevenlabs', voice_id=s.elevenlabs_voice_id, model=s.elevenlabs_model, test=True, bytes=len(audio))
+    return Response(audio, media_type=elevenlabs.MEDIA_TYPE, headers={'Cache-Control': 'no-store', 'X-Voice': 'personal', 'X-Voice-Provider': 'elevenlabs',
+                                                                    'X-Voice-Model': s.elevenlabs_model, 'X-Voice-Id': s.elevenlabs_voice_id or ''})
 
 
 async def _store_upload(db: Session, u: User, session_id: uuid.UUID, file: UploadFile, source: str, images_only: bool) -> MediaOut:

@@ -16,7 +16,13 @@ for it. Turning the speaker off stops playback at once (`PrefsContext.setSpeaker
 
 ## Voices
 
-1. **Natural voice (default):** Gemini text-to-speech, `GEMINI_TTS_MODEL=gemini-2.5-flash-preview-tts`, prebuilt voice
+0. **Personal voice (default when configured):** the technician's own ElevenLabs voice clone
+   (`ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, model `ELEVENLABS_MODEL=eleven_multilingual_v2`, optional
+   `ELEVENLABS_MODEL_KANNADA`). MP3 (`mp3_44100_128`). Same rules as below: only stored, safety-screened replies, cached per
+   message. If ElevenLabs fails (key without the Text to Speech permission, out of credits, network), the server answers with
+   the Gemini voice, and if that fails too the app reads the reply with the device voice. Account errors pause ElevenLabs for
+   10 minutes so every reply does not fail again. The key is never logged or sent to the browser.
+1. **Natural voice:** Gemini text-to-speech, `GEMINI_TTS_MODEL=gemini-2.5-flash-preview-tts`, prebuilt voice
    `GEMINI_TTS_VOICE=Charon` (technicians can choose Kore, Iapetus, Orus, Alnilam or Sadaltager in Settings). The model's
    `speech_config` exists only on the v1beta API, so `GeminiClient.raw_beta` is used for it; on v1 every request failed with
    `Unknown name "speechConfig"`, which is why spoken replies had fallen back to the browser voice. Delivery is steered by the
