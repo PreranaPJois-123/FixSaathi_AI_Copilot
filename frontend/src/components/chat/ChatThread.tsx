@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { AlertTriangle, Check, Copy, Download, FileText, Loader2, Volume2 } from 'lucide-react'
+import { AlertTriangle, Check, Copy, Download, FileText, Loader2, ThumbsDown, ThumbsUp, Volume2 } from 'lucide-react'
 import { Emblem } from '../common/Logo'
 import { useApp } from '../../context/AppContext'
 import { usePrefs } from '../../context/PrefsContext'
@@ -36,6 +36,41 @@ function ReadAloud({ text, id }: { text: string; id: string }) {
   const { voiceURI, rate, aiVoice } = usePrefs()
   if (!speechSupported()) return null
   return <button onClick={() => speech.speak(text, { language, voiceURI, rate, aiVoice, source: sessionId ? { sessionId, messageId: id } : null })} aria-label={t('chat.readAloud')} title={t('chat.readAloud')} className={tool}><Volume2 size={13} /><span className="sr-only sm:not-sr-only">{t('chat.readAloud')}</span></button>
+}
+
+/** Thumbs up / down on an AI answer. A thumbs down opens a one-line note for what was wrong. Saved on the server with the message. */
+function RateAnswer({ m }: { m: ChatMessage }) {
+  const t = useT()
+  const { sessionId } = useApp()
+  const [value, setValue] = useState<boolean | undefined>(m.helpful)
+  const [note, setNote] = useState('')
+  const [asking, setAsking] = useState(false)
+  const [sent, setSent] = useState(false)
+  if (!sessionId) return null
+  const save = async (helpful: boolean | null, comment?: string) => {
+    const before = value
+    setValue(helpful ?? undefined)
+    try { await sessionService.rateAnswer(sessionId, m.id, helpful, comment) } catch { setValue(before) }
+  }
+  const pick = (helpful: boolean) => {
+    if (value === helpful) { setAsking(false); void save(null); return }
+    setSent(false); setAsking(!helpful); void save(helpful)
+  }
+  const on = 'bg-surface-2 text-ink'
+  return (
+    <>
+      <button onClick={() => pick(true)} aria-pressed={value === true} aria-label={t('chat.helpful')} title={t('chat.helpful')} className={`${tool} ${value === true ? on : ''}`}><ThumbsUp size={13} className={value === true ? 'text-ok' : ''} /></button>
+      <button onClick={() => pick(false)} aria-pressed={value === false} aria-label={t('chat.notHelpful')} title={t('chat.notHelpful')} className={`${tool} ${value === false ? on : ''}`}><ThumbsDown size={13} className={value === false ? 'text-crit' : ''} /></button>
+      {sent && <span className="ml-1 text-ok">{t('chat.thanks')}</span>}
+      {asking && (
+        <form className="mt-1.5 flex w-full max-w-md items-center gap-2" onSubmit={e => { e.preventDefault(); setAsking(false); setSent(true); void save(false, note.trim()) }}>
+          <input value={note} onChange={e => setNote(e.target.value)} maxLength={500} autoFocus placeholder={t('chat.whatWrong')} aria-label={t('chat.whatWrong')}
+            className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-accent" />
+          <button type="submit" className="btn btn-sm">{t('chat.send')}</button>
+        </form>
+      )}
+    </>
+  )
 }
 
 /** The download card under a "report ready" reply. The PDF is built on the server from this conversation's recorded data. */
@@ -102,6 +137,7 @@ function Bubble({ m }: { m: ChatMessage }) {
         <div className="mt-1.5 flex flex-wrap items-center gap-0.5 text-[11.5px] text-ink-3">
           {m.text && m.action !== 'pdf_report' && <ReadAloud text={m.text} id={m.id} />}
           {m.text && <CopyButton text={m.text} />}
+          {m.aiGenerated && !m.demo && m.action !== 'pdf_report' && <RateAnswer m={m} />}
           <span className="ml-1.5">{time(m.at)}</span>
           {m.aiGenerated && <span className="ml-2 hidden sm:inline">· {t('chat.aiGenerated')}</span>}
         </div>
