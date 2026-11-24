@@ -29,7 +29,17 @@ CODE_SCORE, ALIAS_SCORE, KW_WEIGHT, EMB_WEIGHT, EMB_MIN_SIM = 10.0, 9.0, 3.0, 3.
 HINGLISH = {'pankha': 'fan', 'pankhe': 'fan', 'thanda': 'cool', 'thandi': 'cool', 'garam': 'hot', 'awaaz': 'noise',
             'awaz': 'noise', 'aawaz': 'noise', 'paani': 'water', 'pani': 'water', 'ghoom': 'spin', 'ghum': 'spin', 'ghumta': 'spin',
             'dhuan': 'smoke', 'dhuaan': 'smoke', 'badbu': 'smell', 'tapak': 'leak', 'tapakna': 'leak', 'bijli': 'power', 'jhatka': 'shock',
-            'hil': 'vibration', 'hilta': 'vibration', 'barf': 'ice', 'dheema': 'slow', 'dheere': 'slow', 'dhire': 'slow'}
+            'hil': 'vibration', 'hilta': 'vibration', 'barf': 'ice', 'dheema': 'slow', 'dheere': 'slow', 'dhire': 'slow',
+            'nikal': 'drain', 'nikalta': 'drain', 'beep': 'beeping', 'chingari': 'spark', 'jal': 'burning', 'jala': 'burning'}
+# The same for Hindi typed in Devanagari (voice input in Hindi arrives this way). Without it a Hindi message finds no records
+# by keyword at all; the embedding channel, when configured, also understands Hindi.
+DEVANAGARI = {'पंखा': 'fan', 'पंखे': 'fan', 'ठंडा': 'cool', 'ठंडी': 'cool', 'ठंडक': 'cooling', 'कूलिंग': 'cooling', 'गरम': 'hot',
+              'गर्म': 'hot', 'आवाज़': 'noise', 'आवाज': 'noise', 'शोर': 'noise', 'पानी': 'water', 'घूम': 'spin', 'घूमता': 'spin',
+              'धुआं': 'smoke', 'धुआँ': 'smoke', 'बदबू': 'smell', 'टपक': 'leak', 'लीक': 'leak', 'बिजली': 'power', 'झटका': 'shock',
+              'बर्फ': 'ice', 'धीमा': 'slow', 'धीरे': 'slow', 'हिल': 'vibration', 'निकल': 'drain', 'बीप': 'beeping', 'चिंगारी': 'spark',
+              'बंद': 'stops', 'चालू': 'start', 'स्वाद': 'taste', 'दरवाजा': 'door', 'दरवाज़ा': 'door', 'लाइट': 'light',
+              'एसी': 'ac', 'फ्रिज': 'fridge', 'फ्रीज': 'fridge', 'मशीन': 'machine', 'माइक्रोवेव': 'microwave', 'प्यूरीफायर': 'purifier'}
+DEV_WORD = re.compile(r'[\u0900-\u097F]+')
 
 
 def _fuse(chan: dict[str, dict], category: str | None, brand: str | None) -> list['Hit']:
@@ -95,6 +105,10 @@ def _tsquery(q: str) -> str | None:
             toks.append(HINGLISH[t])
         if t not in STOP:
             toks.append(t)
+    for t in DEV_WORD.findall(q):
+        en = DEVANAGARI.get(t) or next((v for k, v in DEVANAGARI.items() if t.startswith(k)), None)
+        if en and en not in STOP:
+            toks.append(en)
     return ' | '.join(dict.fromkeys(toks[:24])) or None
 
 
