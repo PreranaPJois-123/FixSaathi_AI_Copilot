@@ -48,6 +48,8 @@ export interface ChatMessage {
   action?: 'pdf_report'
   /** How the message being answered was sent. Only replies to voice messages are read aloud by themselves. */
   channel?: 'text' | 'voice'
+  /** The technician's thumbs up (true) or down (false) on this AI answer; undefined when not rated. */
+  helpful?: boolean
 }
 
 export type VoiceState = 'idle' | 'connecting' | 'listening' | 'processing' | 'responding' | 'error'
@@ -117,7 +119,7 @@ export interface Report { id: string; reference: string; session_id: string; ses
 export interface Overview {
   total_sessions: number; completed: number; active: number; escalated: number; open_escalations: number
   first_time_fix_rate: number | null; first_time_fix_sample: number; avg_repair_minutes: number | null; avg_rating: number | null; ratings_count: number
-  guidance_correct_rate: number | null; avg_ai_latency_ms: number | null; ai_cost_per_repair: number | null; ai_cost_note: string
+  guidance_correct_rate: number | null; answers_rated: number; answers_helpful: number; answer_helpful_rate: number | null; avg_ai_latency_ms: number | null; ai_cost_per_repair: number | null; ai_cost_note: string
 }
 export interface TrendPoint { day: string; date: string; sessions: number; completed: number }
 export interface TechRow { name: string; sessions: number; escalated: number; completed: number }
