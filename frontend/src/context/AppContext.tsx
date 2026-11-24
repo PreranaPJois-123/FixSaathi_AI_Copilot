@@ -38,6 +38,7 @@ export const toChat = (m: ServerMessage): ChatMessage => ({
   sources: (m.meta?.sources as SourceRef[] | undefined) ?? [],
   action: m.meta?.action === 'pdf_report' ? 'pdf_report' : undefined,
   channel: m.meta?.channel === 'voice' ? 'voice' : 'text',
+  helpful: typeof (m.meta?.feedback as { helpful?: unknown } | undefined)?.helpful === 'boolean' ? (m.meta.feedback as { helpful: boolean }).helpful : undefined,
   // Files saved with the message: loaded through the authenticated media endpoint when a session is reopened.
   attachments: serverFiles(m),
 })
