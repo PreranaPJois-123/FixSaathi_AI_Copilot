@@ -9,7 +9,7 @@ from ...db.models import Conversation, Media, RepairSession, User
 from ...db.session import get_db
 from ...dependencies import current_user
 from ...integrations.storage.local import get_storage
-from ...schemas.repair import ChatResult, MediaOut, MessageIn, MessageOut, Page, SessionCreate, SessionOut, SessionPatch
+from ...schemas.repair import AnswerFeedbackIn, ChatResult, MediaOut, MessageIn, MessageOut, Page, SessionCreate, SessionOut, SessionPatch
 from ...services import ai
 from ...services.access import get_owned_session, get_readable_session, session_scope
 from ...services.sessions import TERMINAL, add_message, chat_title, create_session, ensure_open, transition
@@ -158,6 +158,25 @@ async def post_message(session_id: uuid.UUID, body: MessageIn, u: User = Depends
         db.commit()
         return ChatResult(user_message=MessageOut.model_validate(um), assistant_message=None, ai_status='unavailable' if e.status == 503 else 'error',
                           ai_error={'code': e.code, 'message': e.message, 'hint': e.details.get('hint'), 'provider_status': e.details.get('provider_status')})
+
+
+@router.put('/sessions/{session_id}/messages/{message_id}/feedback', response_model=MessageOut)
+def answer_feedback(session_id: uuid.UUID, message_id: uuid.UUID, body: AnswerFeedbackIn, u: User = Depends(current_user), db: Session = Depends(get_db, scope="function")):
+    """The technician marks one AI answer as helpful or not, with an optional note on what was wrong. Stored on the message
+    itself, so it stays with the conversation; the manager dashboard counts it. Sending helpful=null removes the rating."""
+    s = get_owned_session(db, u, session_id)
+    m = db.scalar(select(Conversation).where(Conversation.id == message_id, Conversation.session_id == s.id, Conversation.role == 'assistant'))
+    if m is None:
+        raise NotFound('Message not found.')
+    meta = dict(m.meta or {})
+    if body.helpful is None:
+        meta.pop('feedback', None)
+    else:
+        note = (body.comment or '').strip() or None
+        meta['feedback'] = {'helpful': body.helpful, 'comment': note, 'at': utcnow().isoformat()}
+    m.meta = meta
+    db.flush()
+    return MessageOut.model_validate(m)
 
 
 @router.get('/sessions/{session_id}/messages/{message_id}/speech')
