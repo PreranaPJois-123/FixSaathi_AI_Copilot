@@ -20,12 +20,12 @@ POWER_WORDS = re.compile(
     r'khol\w*|nikal\w*|nikaal\w*|taar)\b', re.I)
 
 ACTION_WORDS = re.compile(
-    r'\b(open(s|ed|ing)?|remov(e|es|ed|ing)|unscrew\w*|disconnect\w*|detach\w*|dismantl\w*|take (it |them )?(off|out|apart)|'
+    r'\b(open(s|ed|ing)?|remov(e|es|ed|ing)|unscrew\w*|disconnect\w*|detach\w*|dismantl\w*|take (it |them |(?!(the |your )?(plug|food|clothes|laundry|load|dish|bowl|plate|filter)\b)(\w+ ){1,3}?)?(off|out|apart)|'
     r'pull (it |them )?(off|out)|lift (off )?the (cover|panel|lid)|lower(ing)? the (canopy|cover|panel)|slide (the )?(canopy|cover) down|'
     r'take down|unclip\w*|unmount\w*|pr(y|ise|ize) (off|open|out)|loosen(ing)? the (canopy|cover|panel|screw|terminal)\w*|expos(e|es|ing) the|'
     r'access(ing)? the (capacitor|terminal|wire|wiring|board|pcb|motor|inside|internal|housing|connection)\w*|discharg\w*|replac(e|es|ed|ing)|swap(ping)?|solder\w*|desolder\w*|'
     r'rewir\w*|re-?connect\w*|strip(ping)? the|cut the wire|touch(ing)? the (terminal|wire|capacitor|board|pcb|contact)\w*|'
-    r'probe\w*|measur\w*|multimeter|continuity|megger|short(ing)? (the|across|out)|bridg(e|ing) the|bypass\w*|jumper\w*|'
+    r'probe\w*|measur\w*|(check|test|read)(s|ing)? (the |for )?(voltage|current|supply) (across|between|at the (terminal|wire|capacitor|board|pcb)|on the (terminal|wire|capacitor|board|pcb))|multimeter|continuity|megger|short(ing)? (the|across|out)|bridg(e|ing) the|bypass\w*|jumper\w*|'
     r'khol\w*|nikal\w*|nikaal\w*|badal\w*|jod\w*|chhu\w*|chhoo\w*)\b', re.I)
 
 # Steps in a chat reply. Live internal parts: a step that reaches, reads or handles them needs isolation however it is phrased
