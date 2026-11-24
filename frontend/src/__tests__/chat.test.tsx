@@ -277,6 +277,24 @@ describe('text vs voice replies', () => {
     await screen.findByText(`Reply to ${words}`)
   }
 
+  it('an AI answer can be marked helpful or not, with a note on what was wrong', async () => {
+    const u = userEvent.setup()
+    await chatPage()
+    vi.spyOn(services.chatService, 'send').mockResolvedValue({ user_message: msg('u9', 'user', 'fan slow', 'text'),
+      assistant_message: { ...msg('a9', 'assistant', 'Reply to fan slow', 'text'), meta: { ai_generated: true } }, ai_status: 'ok', ai_error: null } as never)
+    const rate = vi.spyOn(services.sessionService, 'rateAnswer').mockResolvedValue({} as never)
+    await type(u, 'fan slow')
+    await u.click(screen.getByRole('button', { name: 'Not helpful' }))
+    expect(rate).toHaveBeenLastCalledWith('s1', 'a9', false, undefined)
+    await u.type(screen.getByLabelText('What was wrong? (optional)'), 'it was the capacitor')
+    await u.click(within(screen.getByLabelText('What was wrong? (optional)').closest('form')!).getByRole('button', { name: 'Send' }))
+    expect(rate).toHaveBeenLastCalledWith('s1', 'a9', false, 'it was the capacitor')
+    expect(await screen.findByText('Thanks, noted')).toBeTruthy()
+    await u.click(screen.getByRole('button', { name: 'Helpful' }))
+    expect(rate).toHaveBeenLastCalledWith('s1', 'a9', true, undefined)
+    expect(screen.getByRole('button', { name: 'Helpful' }).getAttribute('aria-pressed')).toBe('true')
+  })
+
   it('typed messages are answered in text only, even with the speaker on', async () => {
     const u = userEvent.setup()
     const speak = await chatPage()
@@ -343,7 +361,7 @@ describe('speech output', () => {
     speech._reset(); device()
     vi.stubGlobal('Audio', FakeAudio)
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:x', revokeObjectURL: () => undefined }))
-    const fetchMock = vi.fn(async () => new Response(new Blob([new Uint8Array([82, 73, 70, 70])]), { status: 200, headers: { 'content-type': 'audio/wav' } }))
+    const fetchMock = vi.fn(async () => new Response(new Uint8Array([82, 73, 70, 70]), { status: 200, headers: { 'content-type': 'audio/wav' } }))
     vi.stubGlobal('fetch', fetchMock)
     speech.speak('Switch off the MCB first.', { language: 'English', aiVoice: 'Kore', source: { sessionId: 's1', messageId: 'a1' } })
     expect(speech.phase()).toBe('preparing')
@@ -353,6 +371,7 @@ describe('speech output', () => {
     const audio = FakeAudio.last!
     expect(audio.paused).toBe(false)
     const u = userEvent.setup()
+    localStorage.setItem('fixsaathi.speaker', 'on')  // an earlier test may have switched the speaker off on this device
     wrap(<Composer onSend={() => undefined} />)
     await u.click(screen.getByRole('button', { name: /Speaker on/ }))
     expect(audio.paused).toBe(true)
@@ -364,7 +383,7 @@ describe('speech output', () => {
     speech._reset(); device()
     vi.stubGlobal('Audio', FakeAudio)
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:y', revokeObjectURL: () => undefined }))
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Blob([new Uint8Array([73, 68, 51])]), { status: 200, headers: { 'content-type': 'audio/mpeg', 'x-voice': 'personal' } })))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array([73, 68, 51]), { status: 200, headers: { 'content-type': 'audio/mpeg', 'x-voice': 'personal' } })))
     speech.speak('Switch off the MCB first.', { language: 'English', aiVoice: 'personal', source: { sessionId: 's1', messageId: 'a9' } })
     await waitFor(() => expect(speech.phase()).toBe('speaking'))
     expect(speech.engine()).toBe('personal')
