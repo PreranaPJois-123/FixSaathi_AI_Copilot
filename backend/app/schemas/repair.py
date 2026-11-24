@@ -151,6 +151,12 @@ class FeedbackIn(BaseModel):
     comment: str | None = Field(default=None, max_length=1000)
 
 
+class AnswerFeedbackIn(BaseModel):
+    """Thumbs up / down on one AI answer. helpful=None clears the rating."""
+    helpful: bool | None
+    comment: str | None = Field(default=None, max_length=500)
+
+
 class Page(BaseModel):
     items: list[Any]
     total: int
