@@ -8,7 +8,7 @@ import { AI_VOICES, onVoicesChanged, speech, speechSupported, testPersonalVoice,
 import { LANG_NATIVE, useT, type Key } from '../i18n'
 import type { Language } from '../types'
 
-const langs: Language[] = ['English', 'Hindi', 'Kannada']
+const LANGS: Language[] = ['English', 'Hindi', 'Kannada']
 
 function Section({ title, hint, children, right }: { title: string; hint?: string; children: ReactNode; right?: ReactNode }) {
   return (
