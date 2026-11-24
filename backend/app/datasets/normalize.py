@@ -137,12 +137,12 @@ def safety_policy(category_: str, step_list: list[str]) -> tuple[bool, list[str]
 # Appliance detection from free text. Named appliances are checked before generic words, so "fridge not cooling" is a
 # refrigerator, "AC indoor fan" is an AC and "ceiling fan" is a fan. Order matters.
 APPLIANCE_PATTERNS = [
-    ('microwave_oven', r'\bmicro ?waves?\b'),
-    ('water_purifier', r'\bpurifiers?\b|\bro (?:water|filter|purifier|machine|system|unit|membrane)\b|\bwater filter\b|\b(?:aquaguard|kent|pureit|livpure)\b'),
-    ('refrigerator', r'\bfridges?\b|\brefrigerators?\b|\bfreezers?\b|\bfrij\b'),
-    ('washing_machine', r'\bwashing\b|\bwashers?\b|\bwasher\b|\b(?:top|front) ?load\b'),
-    ('split_ac', r'\bsplit\b|\bacs?\b|\bair ?condition\w*|\baircon\b'),
-    ('ceiling_fan', r'\bceiling fans?\b|\bfans?\b|\bpankha\b'),
+    ('microwave_oven', r'\bmicro ?waves?\b|माइक्रोवेव'),
+    ('water_purifier', r'\bpurifiers?\b|\bro (?:water|filter|purifier|machine|system|unit|membrane)\b|\bwater filter\b|\b(?:aquaguard|kent|pureit|livpure)\b|\bpurified water\b|प्यूरीफायर|आरओ'),
+    ('refrigerator', r'\bfridges?\b|\brefrigerators?\b|\bfreezers?\b|\bfrij\b|फ्रिज|फ्रीज|रेफ्रिजरेटर'),
+    ('washing_machine', r'\bwashing\b|\bwashers?\b|\bwasher\b|\b(?:top|front) ?load\b|वॉशिंग|वाशिंग'),
+    ('split_ac', r'\bsplit\b|\bacs?\b|\bair ?condition\w*|\baircon\b|एसी|ए\.सी'),
+    ('ceiling_fan', r'\bceiling fans?\b|\bfans?\b|\bpankha\b|पंखा|पंखे'),
     ('mcb_electrical', r'\bmcb\b|\brccb\b|\belcb\b|\bbreaker\b|\bdistribution board\b'),
     ('rooftop_solar', r'\bsolar\b'),
 ]
