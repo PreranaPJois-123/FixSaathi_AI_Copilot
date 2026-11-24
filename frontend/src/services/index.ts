@@ -30,6 +30,9 @@ export const sessionService = {
   rename: (id: string, title: string) => api<RepairSession>(`/api/v1/sessions/${id}`, { method: 'PATCH', body: { title } }),
   /** Removes the chat from the history. Reports and safety records are kept on the server. */
   remove: (id: string) => api<null>(`/api/v1/sessions/${id}`, { method: 'DELETE' }),
+  /** Thumbs up / down on one AI answer; null clears it. The optional note says what was wrong. */
+  rateAnswer: (sid: string, mid: string, helpful: boolean | null, comment?: string) =>
+    api<ServerMessage>(`/api/v1/sessions/${sid}/messages/${mid}/feedback`, { method: 'PUT', body: { helpful, comment: comment || null } }),
   cancel: (id: string) => api<RepairSession>(`/api/v1/sessions/${id}/cancel`, { method: 'POST' }),
   /** Downloads the repair report PDF for a conversation, built on the server from its recorded data. */
   async downloadPdf(id: string, reference?: string) {
