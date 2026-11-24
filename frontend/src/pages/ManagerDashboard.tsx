@@ -22,12 +22,13 @@ export default function ManagerDashboard() {
       {loading && <div className="space-y-4"><Skeleton className="h-24" /><Skeleton className="h-72" /></div>}
       {error && <ErrorState message={error} onRetry={retry} />}
       {data && o && (<>
-        <dl className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <dl className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
           {([
             ['Total sessions', String(o.total_sessions), null], ['First-time fix', pct(o.first_time_fix_rate), o.first_time_fix_rate !== null ? `${o.first_time_fix_sample} completed with a recorded answer` : null],
             ['Active now', String(o.active), null], ['Escalated', String(o.escalated), `${o.open_escalations} open requests`],
             ['Avg AI reply', o.avg_ai_latency_ms === null ? null : `${(o.avg_ai_latency_ms / 1000).toFixed(1)}s`, null],
             ['Avg rating', o.avg_rating === null ? null : `${o.avg_rating} / 5`, o.ratings_count ? `${o.ratings_count} ratings` : null],
+            ['Helpful answers', pct(o.answer_helpful_rate), o.answers_rated ? `${o.answers_helpful} of ${o.answers_rated} rated answers` : null],
           ] as [string, string | null, string | null][]).map(([k, v, sub]) => (
             <div key={k} className="card px-4 py-4"><dt className="text-xs font-medium text-ink-2">{k}</dt><dd className="mt-2 text-[28px] font-semibold leading-none tabular-nums">{v === null ? <span className="text-base font-normal text-ink-3">Not enough data</span> : <span className="fs-grad-text">{v}</span>}</dd>{sub && <p className="mt-1.5 text-[11px] text-ink-3">{sub}</p>}</div>
           ))}
