@@ -2,7 +2,7 @@ from datetime import timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from ..db.base import utcnow
-from ..db.models import AIUsage, EscalationRequest, Feedback, RepairSession, User
+from ..db.models import AIUsage, Conversation, EscalationRequest, Feedback, RepairSession, User
 from .access import session_scope
 
 TERMINAL = ('completed', 'cancelled')
@@ -23,6 +23,9 @@ def overview(db: Session, user: User) -> dict:
     dur = db.scalar(select(func.avg(func.extract('epoch', base.c.completed_at - base.c.started_at))).where(base.c.status == 'completed'))
     rating, rated, correct_known, correct_yes = db.execute(select(func.avg(Feedback.rating), func.count(), func.count(Feedback.guidance_correct),
                                                                   func.count().filter(Feedback.guidance_correct.is_(True))).where(Feedback.session_id.in_(sub))).one()
+    helpful_flag = Conversation.meta['feedback']['helpful'].as_boolean()
+    up, down = db.execute(select(func.count().filter(helpful_flag.is_(True)), func.count().filter(helpful_flag.is_(False)))
+                          .where(Conversation.session_id.in_(sub), Conversation.role == 'assistant')).one()
     lat = db.scalar(select(func.avg(AIUsage.latency_ms)).where(AIUsage.session_id.in_(sub), AIUsage.ok.is_(True)))
     open_esc = db.scalar(select(func.count()).select_from(EscalationRequest).where(EscalationRequest.session_id.in_(sub), EscalationRequest.status == 'open'))
     return {
@@ -32,6 +35,8 @@ def overview(db: Session, user: User) -> dict:
         'avg_repair_minutes': round(float(dur) / 60, 1) if dur else None,
         'avg_rating': round(float(rating), 2) if rating else None, 'ratings_count': rated,
         'guidance_correct_rate': round(correct_yes / correct_known, 3) if correct_known else None,
+        'answers_rated': up + down, 'answers_helpful': up,
+        'answer_helpful_rate': round(up / (up + down), 3) if up + down else None,
         'avg_ai_latency_ms': int(lat) if lat else None,
         'ai_cost_per_repair': None, 'ai_cost_note': 'Not calculated: no verified pricing table is configured.',
     }
